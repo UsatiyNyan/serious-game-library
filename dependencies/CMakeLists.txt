@@ -25,6 +25,11 @@ cpmaddpackage(
         GIT_REPOSITORY "git@github.com:ericniebler/range-v3.git"
         GIT_TAG 0.12.0)
 
+cpmaddpackage(
+        NAME EnTT
+        GIT_REPOSITORY "git@github.com:skypjack/entt.git"
+        GIT_TAG v3.13.2)
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/tl.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/boost.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/spdlog.cmake")
@@ -48,4 +53,7 @@ sl_target_link_system_libraries(${PROJECT_NAME}
 
         # graphics
         serious-graphics-library
+
+        # entt
+        EnTT::EnTT
 )
