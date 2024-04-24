@@ -15,22 +15,13 @@ cpmaddpackage(
 cpmaddpackage(
         NAME libassert
         GIT_REPOSITORY "git@github.com:jeremy-rifkin/libassert.git"
-        GIT_TAG main)
-cpmaddpackage(
-        NAME function2
-        GIT_REPOSITORY "git@github.com:Naios/function2.git"
-        GIT_TAG 4.2.4)
-cpmaddpackage(
-        NAME range-v3
-        GIT_REPOSITORY "git@github.com:ericniebler/range-v3.git"
-        GIT_TAG 0.12.0)
+        GIT_TAG v2.0.1)
 
 cpmaddpackage(
         NAME EnTT
         GIT_REPOSITORY "git@github.com:skypjack/entt.git"
         GIT_TAG v3.13.2)
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/tl.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/boost.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/spdlog.cmake")
 
@@ -42,10 +33,6 @@ sl_target_link_system_libraries(${PROJECT_NAME}
 
         # fp components
         serious-meta-library
-        tl::optional
-        tl::expected
-        function2::function2
-        range-v3::range-v3
 
         # utils
         libassert::assert
