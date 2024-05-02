@@ -4,4 +4,3 @@
 
 #pragma once
 
-#include "sl/game/graphics.hpp"

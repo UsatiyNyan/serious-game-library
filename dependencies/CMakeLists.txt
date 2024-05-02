@@ -7,6 +7,10 @@ cpmaddpackage(
         NAME serious-graphics-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-graphics-library.git"
         GIT_TAG main)
+cpmaddpackage(
+        NAME serious-runtime-library
+        GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-runtime-library.git"
+        GIT_TAG main)
 
 cpmaddpackage(
         NAME fmt
@@ -26,7 +30,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/boost.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/spdlog.cmake")
 
 sl_target_link_system_libraries(${PROJECT_NAME}
-        INTERFACE
+        PUBLIC
         # fmt/log
         fmt::fmt
         spdlog::spdlog
@@ -43,4 +47,7 @@ sl_target_link_system_libraries(${PROJECT_NAME}
 
         # entt
         EnTT::EnTT
+
+        # assets
+        serious-runtime-library
 )

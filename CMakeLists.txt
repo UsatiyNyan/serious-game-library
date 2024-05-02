@@ -21,8 +21,9 @@ project(
         HOMEPAGE_URL "TODO"
         LANGUAGES C CXX)
 
-add_library(${PROJECT_NAME} INTERFACE)
-target_include_directories(${PROJECT_NAME} INTERFACE include)
+add_library(${PROJECT_NAME} STATIC
+        src/graphics/context.cpp)
+target_include_directories(${PROJECT_NAME} PUBLIC include)
 
 add_subdirectory(dependencies)
 
