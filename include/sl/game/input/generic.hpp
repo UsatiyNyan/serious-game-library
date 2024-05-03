@@ -16,10 +16,10 @@
 namespace sl::game {
 
 template <typename Signature, std::size_t max_callbacks = 16>
-class generic_control;
+class generic_input;
 
 template <std::size_t max_callbacks, typename Ret, typename... TArgs>
-class generic_control<Ret(TArgs...), max_callbacks> {
+class generic_input<Ret(TArgs...), max_callbacks> {
 public:
     using callback = fu2::function_base<
         /*IsOwning=*/true,
@@ -27,7 +27,7 @@ public:
         /*Capacity=*/fu2::capacity_default,
         /*IsThrowing=*/false,
         /*HasStrongExceptGuarantee=*/true,
-        void(TArgs...)>;
+        Ret(TArgs...)>;
 
 public:
     template <typename... UArgs>

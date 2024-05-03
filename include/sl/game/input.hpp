@@ -4,4 +4,4 @@
 
 #pragma once
 
-#include "sl/game/control/generic.hpp"
+#include "sl/game/input/generic.hpp"
