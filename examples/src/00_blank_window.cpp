@@ -2,7 +2,9 @@
 // Created by usatiynyan.
 //
 
-#include "sl/game.hpp"
+#include <sl/game.hpp>
+
+#include <sl/meta/func/unit.hpp>
 
 #include <libassert/assert.hpp>
 #include <spdlog/spdlog.h>
@@ -20,8 +22,9 @@ int main() {
         is_esc_pressed.attach([](const sl::gfx::current_window& cw) { return cw.is_key_pressed(GLFW_KEY_ESCAPE); });
 
     while (!gfx.current_window.should_close()) {
-        // control
+        // input
         gfx.context->poll_events();
+        gfx.state->frame_buffer_size.then([&cw = gfx.current_window](glm::ivec2 x) { cw.viewport(glm::ivec2{}, x); });
 
         if (is_esc_pressed(gfx.current_window).value_or(false)) {
             gfx.current_window.set_should_close(true);

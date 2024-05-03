@@ -22,7 +22,8 @@ project(
         LANGUAGES C CXX)
 
 add_library(${PROJECT_NAME} STATIC
-        src/graphics/context.cpp)
+        src/graphics/context.cpp
+        src/graphics/render.cpp)
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 
 add_subdirectory(dependencies)
