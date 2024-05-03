@@ -17,6 +17,7 @@ tl::optional<graphics> initialize_graphics(std::string_view title, glm::ivec2 si
         return tl::nullopt;
     }
     auto current_window = window->make_current(*context, glm::ivec2{}, size, clear_color);
+
     std::unique_ptr<graphics_state> state{ new graphics_state{
         .frame_buffer_size{ size },
         .window_content_scale{ current_window.get_content_scale() },
@@ -31,12 +32,14 @@ tl::optional<graphics> initialize_graphics(std::string_view title, glm::ivec2 si
         state_ptr->window_content_scale.set(content_scale);
     });
 
+    gfx::imgui_context imgui{ context_options, *window };
+
     return graphics{
         .context = std::move(context),
         .window = std::move(window),
         .current_window = std::move(current_window),
         .state = std::move(state),
-        .imgui{ context_options, *window },
+        .imgui = std::move(imgui),
     };
 }
 

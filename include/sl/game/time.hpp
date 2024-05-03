@@ -13,9 +13,9 @@ namespace sl::game {
 
 class time : public meta::unique {
 public:
-    auto calculate_delta() {
+    std::chrono::duration<float> calculate_delta() {
         const auto now = std::chrono::steady_clock::now();
-        return std::chrono::duration<float>(now - std::exchange(now_, now));
+        return std::chrono::duration<float>{now - std::exchange(now_, now)};
     };
 
 private:
