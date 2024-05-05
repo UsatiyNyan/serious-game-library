@@ -120,17 +120,17 @@ constexpr std::array cube_positions{
 };
 
 struct keys_input_state {
-    bool esc{ false };
-    bool q{ false };
-    bool w{ false };
-    bool e{ false };
-    bool a{ false };
-    bool s{ false };
-    bool d{ false };
+    sl::meta::dirty<bool> esc{ false };
+    sl::meta::dirty<bool> q{ false };
+    sl::meta::dirty<bool> w{ false };
+    sl::meta::dirty<bool> e{ false };
+    sl::meta::dirty<bool> a{ false };
+    sl::meta::dirty<bool> s{ false };
+    sl::meta::dirty<bool> d{ false };
 };
 
 struct mouse_input_state {
-    sl::meta::dirty<bool> right;
+    sl::meta::dirty<bool> right{ false };
 };
 
 struct cursor_input_state {
@@ -147,18 +147,32 @@ int main(int argc, char** argv) {
     game::graphics graphics =
         *ASSERT_VAL(game::initialize_graphics("01_lighting", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
-    // TODO: move to callback
-    game::generic_input<keys_input_state(const gfx::current_window& cw)> keys_input;
-    const auto detach_keys_input = keys_input.attach([](const gfx::current_window& cw) {
-        return keys_input_state{
-            .esc = cw.is_key_pressed(GLFW_KEY_ESCAPE),
-            .q = cw.is_key_pressed(GLFW_KEY_Q),
-            .w = cw.is_key_pressed(GLFW_KEY_W),
-            .e = cw.is_key_pressed(GLFW_KEY_E),
-            .a = cw.is_key_pressed(GLFW_KEY_A),
-            .s = cw.is_key_pressed(GLFW_KEY_S),
-            .d = cw.is_key_pressed(GLFW_KEY_D),
-        };
+    keys_input_state kis;
+    (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
+        const bool is_pressed = action == GLFW_PRESS;
+        switch (key) {
+        case GLFW_KEY_ESCAPE:
+            kis.esc.set(is_pressed);
+            break;
+        case GLFW_KEY_Q:
+            kis.q.set(is_pressed);
+            break;
+        case GLFW_KEY_W:
+            kis.w.set(is_pressed);
+            break;
+        case GLFW_KEY_E:
+            kis.e.set(is_pressed);
+            break;
+        case GLFW_KEY_A:
+            kis.a.set(is_pressed);
+            break;
+        case GLFW_KEY_S:
+            kis.s.set(is_pressed);
+            break;
+        case GLFW_KEY_D:
+            kis.d.set(is_pressed);
+            break;
+        }
     });
 
     mouse_input_state mis;
@@ -176,9 +190,9 @@ int main(int argc, char** argv) {
             return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
         };
         constexpr gfx::basis local;
-        return sub(kis.e, kis.q) * local.up() + //
-               sub(kis.d, kis.a) * local.right() + //
-               sub(kis.w, kis.s) * local.forward();
+        return sub(kis.e.get(), kis.q.get()) * local.up() + //
+               sub(kis.d.get(), kis.a.get()) * local.right() + //
+               sub(kis.w.get(), kis.s.get()) * local.forward();
     };
 
     constexpr auto calculate_cursor_offset = [](const mouse_input_state& mis,
@@ -198,7 +212,7 @@ int main(int argc, char** argv) {
 
     constexpr auto camera_update = [](gfx::camera& camera,
                                       std::chrono::duration<float> delta_time,
-                                      const tl::optional<glm::vec3>& maybe_tr,
+                                      const glm::vec3& tr,
                                       const tl::optional<glm::dvec2>& maybe_cursor_offset) {
         maybe_cursor_offset.map([&camera](const glm::dvec2& cursor_offset) {
             constexpr float sensitivity = glm::radians(0.1f);
@@ -214,11 +228,10 @@ int main(int argc, char** argv) {
             const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
             camera.tf.rotate(rot_pitch);
         });
-        maybe_tr.map([&camera, delta_time](const glm::vec3& tr) {
-            constexpr float camera_acc = 2.5f;
-            const float camera_speed = camera_acc * delta_time.count();
-            camera.tf.translate(camera_speed * (camera.tf.rot * tr));
-        });
+
+        constexpr float camera_acc = 2.5f;
+        const float camera_speed = camera_acc * delta_time.count();
+        camera.tf.translate(camera_speed * (camera.tf.rot * tr));
     };
 
     // prepare render
@@ -249,7 +262,6 @@ int main(int argc, char** argv) {
     while (!graphics.current_window.should_close()) {
         // input
         graphics.context->poll_events();
-        tl::optional<keys_input_state> maybe_kis = keys_input(graphics.current_window);
 
         // process input
         graphics.state->frame_buffer_size.then([&cw = graphics.current_window](glm::ivec2 frame_buffer_size) {
@@ -258,19 +270,16 @@ int main(int argc, char** argv) {
         graphics.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
             ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
         });
-
-        if (maybe_kis.map([](const keys_input_state& kis) { return kis.esc; }).value_or(false)) {
-            graphics.current_window.set_should_close(true);
-        }
+        kis.esc.then([&cw = graphics.current_window](bool esc) { cw.set_should_close(esc); });
         mis.right.then([&cw = graphics.current_window](bool right) {
             cw.set_input_mode(GLFW_CURSOR, right ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
         });
 
         // update
         const std::chrono::duration<float> delta_time = time.calculate_delta();
-        const auto maybe_tr = maybe_kis.map(calculate_tr);
+        const auto tr = calculate_tr(kis);
         const auto maybe_cursor_offset = calculate_cursor_offset(mis, cis);
-        camera_update(render.camera, delta_time, maybe_tr, maybe_cursor_offset);
+        camera_update(render.camera, delta_time, tr, maybe_cursor_offset);
 
         // render
         auto bound_render = render.bind(graphics.current_window, *graphics.state);
