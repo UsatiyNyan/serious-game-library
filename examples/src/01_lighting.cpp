@@ -40,7 +40,7 @@ auto create_object_shader(const std::filesystem::path& root) {
         std::move(set_light_pos),
         std::move(set_object_color)
     );
-};
+}
 
 auto create_source_shader(const std::filesystem::path& root) {
     const std::array<gfx::shader, 2> shaders{
@@ -52,7 +52,7 @@ auto create_source_shader(const std::filesystem::path& root) {
     auto set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false));
     auto set_light_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_color"));
     return std::make_tuple(std::move(sp), std::move(set_transform), std::move(set_light_color));
-};
+}
 
 struct VN {
     gfx::va_attrib_field<3, float> vert;
@@ -67,7 +67,7 @@ auto create_buffers(std::span<const VN, vertices_extent> vns, std::span<const un
     auto eb = va_builder.buffer<gfx::buffer_type::element_array, gfx::buffer_usage::static_draw>(indices);
     auto va = std::move(va_builder).submit();
     return std::make_tuple(std::move(vb), std::move(eb), std::move(va));
-};
+}
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-braces"
@@ -119,6 +119,25 @@ constexpr std::array cube_positions{
     glm::vec3{ 0.0f, 0.0f, 0.0f }, //
 };
 
+struct keys_input_state {
+    bool esc{ false };
+    bool q{ false };
+    bool w{ false };
+    bool e{ false };
+    bool a{ false };
+    bool s{ false };
+    bool d{ false };
+};
+
+struct mouse_input_state {
+    sl::meta::dirty<bool> right;
+};
+
+struct cursor_input_state {
+    sl::meta::dirty<glm::dvec2> last;
+    sl::meta::dirty<glm::dvec2> curr;
+};
+
 int main(int argc, char** argv) {
     const sl::rt::context rt_ctx{ argc, argv };
     const auto root = rt_ctx.path().parent_path();
@@ -128,6 +147,81 @@ int main(int argc, char** argv) {
     game::graphics graphics =
         *ASSERT_VAL(game::initialize_graphics("01_lighting", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
+    // TODO: move to callback
+    game::generic_input<keys_input_state(const gfx::current_window& cw)> keys_input;
+    const auto detach_keys_input = keys_input.attach([](const gfx::current_window& cw) {
+        return keys_input_state{
+            .esc = cw.is_key_pressed(GLFW_KEY_ESCAPE),
+            .q = cw.is_key_pressed(GLFW_KEY_Q),
+            .w = cw.is_key_pressed(GLFW_KEY_W),
+            .e = cw.is_key_pressed(GLFW_KEY_E),
+            .a = cw.is_key_pressed(GLFW_KEY_A),
+            .s = cw.is_key_pressed(GLFW_KEY_S),
+            .d = cw.is_key_pressed(GLFW_KEY_D),
+        };
+    });
+
+    mouse_input_state mis;
+    (void)graphics.window->mouse_button_cb.connect([&mis](int button, int action, int mods [[maybe_unused]]) {
+        if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+            mis.right.set(action == GLFW_PRESS);
+        }
+    });
+
+    cursor_input_state cis;
+    (void)graphics.window->cursor_pos_cb.connect([&cis](glm::dvec2 cursor_pos) { cis.curr.set(cursor_pos); });
+
+    constexpr auto calculate_tr = [](const keys_input_state& kis) {
+        constexpr auto sub = [](bool a, bool b) {
+            return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
+        };
+        constexpr gfx::basis local;
+        return sub(kis.e, kis.q) * local.up() + //
+               sub(kis.d, kis.a) * local.right() + //
+               sub(kis.w, kis.s) * local.forward();
+    };
+
+    constexpr auto calculate_cursor_offset = [](const mouse_input_state& mis,
+                                                cursor_input_state& cis) -> tl::optional<glm::dvec2> {
+        if (!mis.right.get()) {
+            cis.curr.then([&cis](glm::dvec2 curr) { cis.last.set(curr); });
+            return tl::nullopt;
+        }
+        return cis.curr
+            .then([&cis](const glm::dvec2& curr) {
+                auto offset = cis.last.then([&curr](const glm::dvec2& last) { return curr - last; });
+                cis.last.set(curr);
+                return offset;
+            })
+            .value_or(tl::nullopt);
+    };
+
+    constexpr auto camera_update = [](gfx::camera& camera,
+                                      std::chrono::duration<float> delta_time,
+                                      const tl::optional<glm::vec3>& maybe_tr,
+                                      const tl::optional<glm::dvec2>& maybe_cursor_offset) {
+        maybe_cursor_offset.map([&camera](const glm::dvec2& cursor_offset) {
+            constexpr float sensitivity = glm::radians(0.1f);
+            const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
+            const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
+
+            constexpr gfx::basis local;
+            const glm::quat rot_yaw = glm::angleAxis(yaw, local.y);
+            camera.tf.rotate(rot_yaw);
+
+            const glm::vec3 camera_forward = camera.tf.rot * local.forward();
+            const glm::vec3 camera_right = glm::cross(camera_forward, local.up());
+            const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
+            camera.tf.rotate(rot_pitch);
+        });
+        maybe_tr.map([&camera, delta_time](const glm::vec3& tr) {
+            constexpr float camera_acc = 2.5f;
+            const float camera_speed = camera_acc * delta_time.count();
+            camera.tf.translate(camera_speed * (camera.tf.rot * tr));
+        });
+    };
+
+    // prepare render
     game::render render{
         graphics,
         gfx::perspective_projection{
@@ -141,76 +235,6 @@ int main(int argc, char** argv) {
         .rot = glm::angleAxis(glm::radians(-180.0f), render.world.up()),
     };
 
-    // TODO: generic_input
-    constexpr auto is_esc_pressed = [](const gfx::current_window& cw) { return cw.is_key_pressed(GLFW_KEY_ESCAPE); };
-    const auto poll_movement = [&world = render.world](const gfx::current_window& cw) {
-        gfx::transform movement{};
-        if (cw.is_key_pressed(GLFW_KEY_W)) {
-            movement.translate(world.forward());
-        }
-        if (cw.is_key_pressed(GLFW_KEY_S)) {
-            movement.translate(-world.forward());
-        }
-        if (cw.is_key_pressed(GLFW_KEY_D)) {
-            movement.translate(world.right());
-        }
-        if (cw.is_key_pressed(GLFW_KEY_A)) {
-            movement.translate(-world.right());
-        }
-        if (cw.is_key_pressed(GLFW_KEY_Q)) {
-            movement.translate(-world.up());
-        }
-        if (cw.is_key_pressed(GLFW_KEY_E)) {
-            movement.translate(world.up());
-        }
-        return normalize(movement);
-    };
-
-    const auto update = [&camera =
-                             render.camera](std::chrono::duration<float> delta_time, const gfx::transform& movement) {
-        constexpr float camera_acc = 2.5f;
-        const float camera_speed = camera_acc * delta_time.count();
-        camera.tf.translate(camera_speed * (camera.tf.rot * movement.tr));
-    };
-
-    std::optional<glm::dvec2> last_cursor_pos{};
-
-    // TODO: dirty
-    (void)graphics.window->mouse_button_cb.connect([&](int button, int action, int mods [[maybe_unused]]) {
-        if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
-            const int new_input_mode = action == GLFW_PRESS ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL;
-            graphics.current_window.set_input_mode(GLFW_CURSOR, new_input_mode);
-            last_cursor_pos.reset();
-        }
-    });
-
-    // TODO: dirty
-    (void)graphics.window->cursor_pos_cb.connect([&](glm::dvec2 cursor_pos) {
-        if (graphics.current_window.get_input_mode(GLFW_CURSOR) != GLFW_CURSOR_DISABLED) {
-            return;
-        }
-
-        if (!last_cursor_pos.has_value()) {
-            last_cursor_pos = cursor_pos;
-            return;
-        }
-        const glm::vec2 cursor_offset = *last_cursor_pos - cursor_pos;
-        last_cursor_pos = cursor_pos;
-
-        constexpr float sensitivity = glm::radians(0.1f);
-        const float yaw = cursor_offset.x * sensitivity;
-        const float pitch = cursor_offset.y * sensitivity;
-
-        const glm::quat rot_yaw = glm::angleAxis(yaw, render.world.y);
-        render.camera.tf.rotate(rot_yaw);
-
-        const glm::vec3 camera_forward = render.camera.tf.rot * render.world.forward();
-        const glm::vec3 camera_right = glm::cross(camera_forward, render.world.up());
-        const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
-        render.camera.tf.rotate(rot_pitch);
-    });
-
-    // prepare render
     const auto object_shader = create_object_shader(root);
     const auto object_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
 
@@ -225,6 +249,7 @@ int main(int argc, char** argv) {
     while (!graphics.current_window.should_close()) {
         // input
         graphics.context->poll_events();
+        tl::optional<keys_input_state> maybe_kis = keys_input(graphics.current_window);
 
         // process input
         graphics.state->frame_buffer_size.then([&cw = graphics.current_window](glm::ivec2 frame_buffer_size) {
@@ -233,16 +258,19 @@ int main(int argc, char** argv) {
         graphics.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
             ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
         });
-        if (is_esc_pressed(graphics.current_window)) {
+
+        if (maybe_kis.map([](const keys_input_state& kis) { return kis.esc; }).value_or(false)) {
             graphics.current_window.set_should_close(true);
         }
-        const gfx::transform movement = poll_movement(graphics.current_window);
-
-        // time
-        const std::chrono::duration<float> delta_time = time.calculate_delta();
+        mis.right.then([&cw = graphics.current_window](bool right) {
+            cw.set_input_mode(GLFW_CURSOR, right ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        });
 
         // update
-        update(delta_time, movement);
+        const std::chrono::duration<float> delta_time = time.calculate_delta();
+        const auto maybe_tr = maybe_kis.map(calculate_tr);
+        const auto maybe_cursor_offset = calculate_cursor_offset(mis, cis);
+        camera_update(render.camera, delta_time, maybe_tr, maybe_cursor_offset);
 
         // render
         auto bound_render = render.bind(graphics.current_window, *graphics.state);
@@ -284,10 +312,8 @@ int main(int argc, char** argv) {
         }
 
         // overlay
-        graphics.imgui.new_frame();
-        sl::meta::defer imgui_render{ [&imgui = graphics.imgui] { imgui.render(); } };
-
-        if (const sl::meta::defer imgui_end{ ImGui::End }; ImGui::Begin("light")) {
+        auto imgui_frame = graphics.imgui.new_frame();
+        if (const auto imgui_window = imgui_frame.begin("light")) {
             ImGui::SliderFloat3("light pos", glm::value_ptr(source_position), -10.0f, 10.0f);
             ImGui::ColorEdit3("light color", glm::value_ptr(source_color));
         }
