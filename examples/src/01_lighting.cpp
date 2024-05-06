@@ -4,6 +4,7 @@
 
 #include <sl/game.hpp>
 #include <sl/gfx.hpp>
+#include <sl/meta.hpp>
 #include <sl/rt.hpp>
 
 #include <libassert/assert.hpp>
@@ -149,7 +150,7 @@ int main(int argc, char** argv) {
 
     keys_input_state kis;
     (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
-        const bool is_pressed = action == GLFW_PRESS;
+        const bool is_pressed = action == GLFW_PRESS || action == GLFW_REPEAT;
         switch (key) {
         case GLFW_KEY_ESCAPE:
             kis.esc.set(is_pressed);
@@ -178,7 +179,7 @@ int main(int argc, char** argv) {
     mouse_input_state mis;
     (void)graphics.window->mouse_button_cb.connect([&mis](int button, int action, int mods [[maybe_unused]]) {
         if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-            mis.right.set(action == GLFW_PRESS);
+            mis.right.set(action == GLFW_PRESS || action == GLFW_REPEAT);
         }
     });
 
@@ -215,7 +216,7 @@ int main(int argc, char** argv) {
                                       const glm::vec3& tr,
                                       const tl::optional<glm::dvec2>& maybe_cursor_offset) {
         maybe_cursor_offset.map([&camera](const glm::dvec2& cursor_offset) {
-            constexpr float sensitivity = glm::radians(0.1f);
+            constexpr float sensitivity = -glm::radians(0.1f);
             const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
             const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
 
@@ -292,7 +293,6 @@ int main(int argc, char** argv) {
             gfx::draw draw{ sp, va, {} };
 
             set_light_color(draw.sp(), source_color.r, source_color.g, source_color.b);
-
             const glm::mat4 model = glm::translate(glm::mat4(1.0f), source_position);
             const glm::mat4 transform = bound_render.projection * bound_render.view * model;
             set_transform(draw.sp(), glm::value_ptr(transform));
@@ -312,7 +312,12 @@ int main(int argc, char** argv) {
             set_object_color(draw.sp(), 0.61f, 0.08f, 0.90f); // #9c15e6
 
             for (const auto& pos : cube_positions) {
-                const glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
+                const auto make_model =
+                    sl::meta::pipeline{}
+                        .then([&render](auto x) { return glm::rotate(x, glm::radians(90.0f), render.world.up()); })
+                        .then([&pos](auto x) { return glm::translate(x, pos); });
+
+                const glm::mat4 model = make_model(glm::mat4(1.0f));
                 set_model(draw.sp(), glm::value_ptr(model));
                 const glm::mat4 transform = bound_render.projection * bound_render.view * model;
                 set_transform(draw.sp(), glm::value_ptr(transform));
