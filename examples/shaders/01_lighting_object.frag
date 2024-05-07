@@ -13,7 +13,7 @@ out vec4 frag_color;
 
 void main() {
     const vec3 ambient_color = u_ambient_strength * u_light_color;
-    
+
     const vec3 normal = normalize(msg_normal); // just to make sure
     const vec3 light_direction = normalize(u_light_pos - msg_frag_pos);
     const float diffuse_angle = max(dot(normal, light_direction), 0.0f);

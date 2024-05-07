@@ -118,6 +118,7 @@ constexpr std::array indices{
 
 constexpr std::array cube_positions{
     glm::vec3{ 0.0f, 0.0f, 0.0f }, //
+    glm::vec3{ 5.0f, 0.0f, 0.0f }, //
 };
 
 struct keys_input_state {
@@ -312,12 +313,11 @@ int main(int argc, char** argv) {
             set_object_color(draw.sp(), 0.61f, 0.08f, 0.90f); // #9c15e6
 
             for (const auto& pos : cube_positions) {
-                const auto make_model =
+                const glm::mat4 model =
                     sl::meta::pipeline{}
-                        .then([&render](auto x) { return glm::rotate(x, glm::radians(90.0f), render.world.up()); })
-                        .then([&pos](auto x) { return glm::translate(x, pos); });
-
-                const glm::mat4 model = make_model(glm::mat4(1.0f));
+                        .then([&pos](auto x) { return glm::translate(x, pos); }) // 2nd op
+                        .then([&render](auto x) { return glm::rotate(x, glm::radians(60.0f), render.world.up()); }) // 1st op
+                    (glm::mat4(1.0f));
                 set_model(draw.sp(), glm::value_ptr(model));
                 const glm::mat4 transform = bound_render.projection * bound_render.view * model;
                 set_transform(draw.sp(), glm::value_ptr(transform));
