@@ -29,6 +29,7 @@ auto create_object_shader(const std::filesystem::path& root) {
     auto sp = *ASSERT_VAL(gfx::shader_program::build(std::span{ shaders }));
     auto sp_bind = sp.bind();
     auto set_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_model", 1, false));
+    auto set_it_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix3fv, "u_it_model", 1, false));
     auto set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false));
     auto set_light_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_color"));
     auto set_light_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_pos"));
@@ -36,6 +37,7 @@ auto create_object_shader(const std::filesystem::path& root) {
     return std::make_tuple(
         std::move(sp),
         std::move(set_model),
+        std::move(set_it_model),
         std::move(set_transform),
         std::move(set_light_color),
         std::move(set_light_pos),
@@ -303,7 +305,7 @@ int main(int argc, char** argv) {
         // objects
         {
             const auto& [vb, eb, va] = object_buffers;
-            const auto& [sp, set_model, set_transform, set_light_color, set_light_pos, set_object_color] =
+            const auto& [sp, set_model, set_it_model, set_transform, set_light_color, set_light_pos, set_object_color] =
                 object_shader;
 
             gfx::draw draw{ sp, va, {} };
@@ -313,13 +315,19 @@ int main(int argc, char** argv) {
             set_object_color(draw.sp(), 0.61f, 0.08f, 0.90f); // #9c15e6
 
             for (const auto& pos : cube_positions) {
-                const glm::mat4 model =
-                    sl::meta::pipeline{}
-                        .then([&pos](auto x) { return glm::translate(x, pos); }) // 2nd op
-                        .then([&render](auto x) { return glm::rotate(x, glm::radians(60.0f), render.world.up()); }) // 1st op
-                    (glm::mat4(1.0f));
-                set_model(draw.sp(), glm::value_ptr(model));
+                const auto make_model =
+                    sl::meta::pipeline{} //
+                        .then([&pos](auto x) { return glm::translate(x, pos); })
+                        .then([&render](auto x) { return glm::rotate(x, glm::radians(60.0f), render.world.up()); });
+                const auto make_it_model = sl::meta::pipeline{} //
+                                               .then(SL_META_LIFT(glm::inverse))
+                                               .then(SL_META_LIFT(glm::transpose));
+
+                const glm::mat4 model = make_model(glm::mat4(1.0f));
+                const glm::mat3 it_model = make_it_model(model);
                 const glm::mat4 transform = bound_render.projection * bound_render.view * model;
+                set_model(draw.sp(), glm::value_ptr(model));
+                set_it_model(draw.sp(), glm::value_ptr(it_model));
                 set_transform(draw.sp(), glm::value_ptr(transform));
                 draw.elements(eb);
             }
