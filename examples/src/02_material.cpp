@@ -25,12 +25,10 @@ using uniform_setter = fu2::unique_function<void(const gfx::bound_shader_program
 
 struct object_shader {
     gfx::shader_program sp;
+
     uniform_setter<const float*> set_model;
     uniform_setter<const float*> set_it_model;
     uniform_setter<const float*> set_transform;
-    uniform_setter<float, float, float> set_light_color;
-    uniform_setter<float, float, float> set_light_pos;
-    uniform_setter<float, float, float> set_view_pos;
 
     struct material {
         uniform_setter<float, float, float> set_ambient;
@@ -39,6 +37,16 @@ struct object_shader {
         uniform_setter<float> set_shininess;
     };
     material material;
+
+    struct light {
+        uniform_setter<float, float, float> set_position;
+        uniform_setter<float, float, float> set_ambient;
+        uniform_setter<float, float, float> set_diffuse;
+        uniform_setter<float, float, float> set_specular;
+    };
+    light light;
+
+    uniform_setter<float, float, float> set_view_pos;
 };
 
 object_shader create_object_shader(const std::filesystem::path& root) {
@@ -53,15 +61,19 @@ object_shader create_object_shader(const std::filesystem::path& root) {
         .set_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_model", 1, false)),
         .set_it_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix3fv, "u_it_model", 1, false)),
         .set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false)),
-        .set_light_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_color")),
-        .set_light_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_pos")),
-        .set_view_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_view_pos")),
         .material{
             .set_ambient = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_material.ambient")),
             .set_diffuse = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_material.diffuse")),
             .set_specular = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_material.specular")),
             .set_shininess = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_material.shininess")),
         },
+        .light{
+            .set_position = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.position")),
+            .set_ambient = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.ambient")),
+            .set_diffuse = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.diffuse")),
+            .set_specular = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.specular")),
+        },
+        .set_view_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_view_pos")),
     };
 }
 
@@ -150,25 +162,11 @@ struct render_object {
     material material;
 };
 
-std::array cube_objects{
-    render_object{
-        .position{ 0.0f, 0.0f, 0.0f },
-        .material{
-            .ambient{ 0.1745f, 0.01175f, 0.01175f },
-            .diffuse{ 0.61424f, 0.04136f, 0.04136f },
-            .specular{ 0.727811f, 0.626959f, 0.626959f },
-            .shininess = 128.0f * 0.6f,
-        },
-    },
-    render_object{
-        .position{ 5.0f, 0.0f, 0.0f },
-        .material{
-            .ambient{ 0.1745f, 0.01175f, 0.01175f },
-            .diffuse{ 0.61424f, 0.04136f, 0.04136f },
-            .specular{ 0.727811f, 0.626959f, 0.626959f },
-            .shininess = 128.0f * 0.6f,
-        },
-    },
+struct light {
+    glm::vec3 position;
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
 };
 
 struct keys_input_state {
@@ -304,10 +302,36 @@ int main(int argc, char** argv) {
     const auto object_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
 
     // TODO: many lights?
-    glm::vec3 source_position{ 2.0f, 2.0f, -3.0f };
     const auto source_shader = create_source_shader(root);
     const auto source_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
-    glm::vec3 source_color{ 1.0f, 1.0f, 1.0f };
+
+    std::array cube_objects{
+        render_object{
+            .position{ 0.0f, 0.0f, 0.0f },
+            .material{
+                .ambient{ 0.1745f, 0.01175f, 0.01175f },
+                .diffuse{ 0.61424f, 0.04136f, 0.04136f },
+                .specular{ 0.727811f, 0.626959f, 0.626959f },
+                .shininess = 128.0f * 0.6f,
+            },
+        },
+        render_object{
+            .position{ 5.0f, 0.0f, 0.0f },
+            .material{
+                .ambient{ 1.0f, 0.5f, 0.31f },
+                .diffuse{ 1.0f, 0.5f, 0.31f },
+                .specular{ 0.5f, 0.5f, 0.5f },
+                .shininess = 32.0f,
+            },
+        },
+    };
+
+    light light{
+        .position{ 2.0f, 2.0f, -3.0f },
+        .ambient{ 0.2f, 0.2f, 0.2f },
+        .diffuse{ 0.5f, 0.5f, 0.5f },
+        .specular{ 1.0f, 1.0f, 1.0f },
+    };
 
     game::time time;
 
@@ -343,8 +367,8 @@ int main(int argc, char** argv) {
 
             gfx::draw draw{ sp, va, {} };
 
-            set_light_color(draw.sp(), source_color.r, source_color.g, source_color.b);
-            const glm::mat4 model = glm::translate(glm::mat4(1.0f), source_position);
+            set_light_color(draw.sp(), light.ambient.r, light.ambient.g, light.ambient.b);
+            const glm::mat4 model = glm::translate(glm::mat4(1.0f), light.position);
             const glm::mat4 transform = bound_render.projection * bound_render.view * model;
             set_transform(draw.sp(), glm::value_ptr(transform));
             draw.elements(eb);
@@ -355,22 +379,26 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = object_buffers;
             gfx::draw draw{ object_shader.sp, va, {} };
 
-            object_shader.set_light_color(draw.sp(), source_color.r, source_color.g, source_color.b);
-            object_shader.set_light_pos(draw.sp(), source_position.x, source_position.y, source_position.z);
             const auto& view_position = render.camera.tf.tr;
             object_shader.set_view_pos(draw.sp(), view_position.x, view_position.y, view_position.z);
 
+            object_shader.light.set_position(draw.sp(), light.position.x, light.position.y, light.position.z);
+            object_shader.light.set_ambient(draw.sp(), light.ambient.r, light.ambient.g, light.ambient.b);
+            object_shader.light.set_diffuse(draw.sp(), light.diffuse.r, light.diffuse.g, light.diffuse.b);
+            object_shader.light.set_specular(draw.sp(), light.specular.r, light.specular.g, light.specular.b);
+
             for (const auto& [position, material] : cube_objects) {
                 object_shader.material.set_ambient(
-                    draw.sp(), material.ambient.x, material.ambient.y, material.ambient.z
+                    draw.sp(), material.ambient.r, material.ambient.g, material.ambient.b
                 );
                 object_shader.material.set_diffuse(
-                    draw.sp(), material.diffuse.x, material.diffuse.y, material.diffuse.z
+                    draw.sp(), material.diffuse.r, material.diffuse.g, material.diffuse.b
                 );
                 object_shader.material.set_specular(
-                    draw.sp(), material.specular.x, material.specular.y, material.specular.z
+                    draw.sp(), material.specular.r, material.specular.g, material.specular.b
                 );
                 object_shader.material.set_shininess(draw.sp(), material.shininess);
+
                 const auto make_model =
                     sl::meta::pipeline{} //
                         .then([&p = position](auto x) { return glm::translate(x, p); })
@@ -392,19 +420,21 @@ int main(int argc, char** argv) {
         // overlay
         auto imgui_frame = graphics.imgui.new_frame();
         if (const auto imgui_window = imgui_frame.begin("light")) {
+            ImGui::SliderFloat3("light position", glm::value_ptr(light.position), -10.0f, 10.0f);
+            ImGui::ColorEdit3("light ambient", glm::value_ptr(light.ambient));
+            ImGui::ColorEdit3("light diffuse", glm::value_ptr(light.diffuse));
+            ImGui::ColorEdit3("light specular", glm::value_ptr(light.specular));
+
             int i = 0;
             for (auto& [_, material] : cube_objects) {
                 ImGui::PushID(i++);
+                ImGui::Spacing();
                 ImGui::ColorEdit3("ambient", glm::value_ptr(material.ambient));
                 ImGui::ColorEdit3("diffuse", glm::value_ptr(material.diffuse));
                 ImGui::ColorEdit3("specular", glm::value_ptr(material.specular));
                 ImGui::SliderFloat("shininess", &material.shininess, 2.0f, 256, "%.0f", ImGuiSliderFlags_Logarithmic);
-                ImGui::Spacing();
                 ImGui::PopID();
             }
-
-            ImGui::SliderFloat3("light pos", glm::value_ptr(source_position), -10.0f, 10.0f);
-            ImGui::ColorEdit3("light color", glm::value_ptr(source_color));
         }
     }
 
