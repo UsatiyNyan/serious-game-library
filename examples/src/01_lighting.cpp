@@ -2,6 +2,7 @@
 // Created by usatiynyan.
 //
 
+#include <imgui.h>
 #include <sl/game.hpp>
 #include <sl/gfx.hpp>
 #include <sl/meta.hpp>
@@ -16,33 +17,46 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/string_cast.hpp>
 
-#include <sl/meta/lifetime/defer.hpp>
-
 namespace game = sl::game;
 namespace gfx = sl::gfx;
 
-auto create_object_shader(const std::filesystem::path& root) {
+template <typename... Args>
+using uniform_setter = fu2::unique_function<void(const gfx::bound_shader_program&, Args...)>;
+
+struct object_shader {
+    gfx::shader_program sp;
+    uniform_setter<const float*> set_model;
+    uniform_setter<const float*> set_it_model;
+    uniform_setter<const float*> set_transform;
+    uniform_setter<float, float, float> set_light_color;
+    uniform_setter<float, float, float> set_light_pos;
+    uniform_setter<float, float, float> set_view_pos;
+    uniform_setter<float, float, float> set_object_color;
+    uniform_setter<float> set_ambient_strength;
+    uniform_setter<float> set_specular_strength;
+    uniform_setter<int> set_shininess;
+};
+
+object_shader create_object_shader(const std::filesystem::path& root) {
     const std::array<gfx::shader, 2> shaders{
         *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::vertex, root / "shaders/01_lighting_object.vert")),
         *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::fragment, root / "shaders/01_lighting_object.frag")),
     };
     auto sp = *ASSERT_VAL(gfx::shader_program::build(std::span{ shaders }));
     auto sp_bind = sp.bind();
-    auto set_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_model", 1, false));
-    auto set_it_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix3fv, "u_it_model", 1, false));
-    auto set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false));
-    auto set_light_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_color"));
-    auto set_light_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_pos"));
-    auto set_object_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_object_color"));
-    return std::make_tuple(
-        std::move(sp),
-        std::move(set_model),
-        std::move(set_it_model),
-        std::move(set_transform),
-        std::move(set_light_color),
-        std::move(set_light_pos),
-        std::move(set_object_color)
-    );
+    return object_shader{
+        .sp = std::move(sp),
+        .set_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_model", 1, false)),
+        .set_it_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix3fv, "u_it_model", 1, false)),
+        .set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false)),
+        .set_light_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_color")),
+        .set_light_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_pos")),
+        .set_view_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_view_pos")),
+        .set_object_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_object_color")),
+        .set_ambient_strength = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_ambient_strength")),
+        .set_specular_strength = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_specular_strength")),
+        .set_shininess = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1i, "u_shininess")),
+    };
 }
 
 auto create_source_shader(const std::filesystem::path& root) {
@@ -118,9 +132,14 @@ constexpr std::array indices{
     20u, 21u, 23u, 21u, 22u, 23u, // Bottom face
 };
 
-constexpr std::array cube_positions{
-    glm::vec3{ 0.0f, 0.0f, 0.0f }, //
-    glm::vec3{ 5.0f, 0.0f, 0.0f }, //
+struct CubeObject {
+    glm::vec3 pos;
+    glm::vec3 color;
+};
+
+constexpr std::array cube_objects{
+    CubeObject{ glm::vec3{ 0.0f, 0.0f, 0.0f }, glm::vec3{ 0.61f, 0.08f, 0.90f } }, //
+    CubeObject{ glm::vec3{ 5.0f, 0.0f, 0.0f }, glm::vec3{ 0.61f, 0.00f, 0.31f } }, //
 };
 
 struct keys_input_state {
@@ -252,7 +271,7 @@ int main(int argc, char** argv) {
         .rot = glm::angleAxis(glm::radians(-180.0f), render.world.up()),
     };
 
-    const auto object_shader = create_object_shader(root);
+    auto object_shader = create_object_shader(root);
     const auto object_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
 
     // TODO: many lights?
@@ -260,6 +279,9 @@ int main(int argc, char** argv) {
     const auto source_shader = create_source_shader(root);
     const auto source_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
     glm::vec3 source_color{ 1.0f, 1.0f, 1.0f };
+    float ambient_strength = 0.1f;
+    float specular_strength = 0.5f;
+    int shininess = 32;
 
     game::time time;
 
@@ -305,19 +327,21 @@ int main(int argc, char** argv) {
         // objects
         {
             const auto& [vb, eb, va] = object_buffers;
-            const auto& [sp, set_model, set_it_model, set_transform, set_light_color, set_light_pos, set_object_color] =
-                object_shader;
+            gfx::draw draw{ object_shader.sp, va, {} };
 
-            gfx::draw draw{ sp, va, {} };
+            object_shader.set_light_color(draw.sp(), source_color.r, source_color.g, source_color.b);
+            object_shader.set_light_pos(draw.sp(), source_position.x, source_position.y, source_position.z);
+            const auto& view_position = render.camera.tf.tr;
+            object_shader.set_view_pos(draw.sp(), view_position.x, view_position.y, view_position.z);
+            object_shader.set_ambient_strength(draw.sp(), ambient_strength);
+            object_shader.set_specular_strength(draw.sp(), specular_strength);
+            object_shader.set_shininess(draw.sp(), shininess);
 
-            set_light_color(draw.sp(), source_color.r, source_color.g, source_color.b);
-            set_light_pos(draw.sp(), source_position.x, source_position.y, source_position.z);
-            set_object_color(draw.sp(), 0.61f, 0.08f, 0.90f); // #9c15e6
-
-            for (const auto& pos : cube_positions) {
+            for (const auto& cube : cube_objects) {
+                object_shader.set_object_color(draw.sp(), cube.color.r, cube.color.g, cube.color.b);
                 const auto make_model =
                     sl::meta::pipeline{} //
-                        .then([&pos](auto x) { return glm::translate(x, pos); })
+                        .then([&pos = cube.pos](auto x) { return glm::translate(x, pos); })
                         .then([&render](auto x) { return glm::rotate(x, glm::radians(60.0f), render.world.up()); });
                 const auto make_it_model = sl::meta::pipeline{} //
                                                .then(SL_META_LIFT(glm::inverse))
@@ -326,9 +350,9 @@ int main(int argc, char** argv) {
                 const glm::mat4 model = make_model(glm::mat4(1.0f));
                 const glm::mat3 it_model = make_it_model(model);
                 const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-                set_model(draw.sp(), glm::value_ptr(model));
-                set_it_model(draw.sp(), glm::value_ptr(it_model));
-                set_transform(draw.sp(), glm::value_ptr(transform));
+                object_shader.set_model(draw.sp(), glm::value_ptr(model));
+                object_shader.set_it_model(draw.sp(), glm::value_ptr(it_model));
+                object_shader.set_transform(draw.sp(), glm::value_ptr(transform));
                 draw.elements(eb);
             }
         }
@@ -338,6 +362,9 @@ int main(int argc, char** argv) {
         if (const auto imgui_window = imgui_frame.begin("light")) {
             ImGui::SliderFloat3("light pos", glm::value_ptr(source_position), -10.0f, 10.0f);
             ImGui::ColorEdit3("light color", glm::value_ptr(source_color));
+            ImGui::SliderFloat("ambient strength", &ambient_strength, 0.0f, 1.0f);
+            ImGui::SliderFloat("specular strength", &specular_strength, 0.0f, 1.0f);
+            ImGui::SliderInt("shininess", &shininess, 2, 256, "%d", ImGuiSliderFlags_Logarithmic);
         }
     }
 
