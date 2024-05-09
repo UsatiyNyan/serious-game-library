@@ -31,9 +31,8 @@ struct object_shader {
     uniform_setter<const float*> set_transform;
 
     struct material {
-        uniform_setter<float, float, float> set_ambient;
-        uniform_setter<float, float, float> set_diffuse;
-        uniform_setter<float, float, float> set_specular;
+        // diffuse
+        // specular
         uniform_setter<float> set_shininess;
     };
     material material;
@@ -49,22 +48,35 @@ struct object_shader {
     uniform_setter<float, float, float> set_view_pos;
 };
 
+gfx::texture<gfx::texture_type::texture_2d> create_texture(const std::filesystem::path& image_path) {
+    gfx::texture_builder<gfx::texture_type::texture_2d> tex_builder;
+    tex_builder.set_wrap_s(gfx::texture_wrap::repeat);
+    tex_builder.set_wrap_t(gfx::texture_wrap::repeat);
+    tex_builder.set_min_filter(gfx::texture_filter::nearest);
+    tex_builder.set_max_filter(gfx::texture_filter::nearest);
+
+    const auto image = *ASSERT_VAL(stb::image_load(image_path, 4));
+    tex_builder.set_image(std::span{ image.dimensions }, gfx::texture_format{ GL_RGB, GL_RGBA }, image.data.get());
+    return std::move(tex_builder).submit();
+}
+
 object_shader create_object_shader(const std::filesystem::path& root) {
     const std::array<gfx::shader, 2> shaders{
-        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::vertex, root / "shaders/02_material_object.vert")),
-        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::fragment, root / "shaders/02_material_object.frag")),
+        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::vertex, root / "shaders/03_lightmap.vert")),
+        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::fragment, root / "shaders/03_lightmap.frag")),
     };
     auto sp = *ASSERT_VAL(gfx::shader_program::build(std::span{ shaders }));
     auto sp_bind = sp.bind();
+
+    constexpr std::array<std::string_view, 2> material_textures{ "u_material.diffuse", "u_material.specular" };
+    sp_bind.initialize_tex_units(std::span{ material_textures });
+
     return object_shader{
         .sp = std::move(sp),
         .set_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_model", 1, false)),
         .set_it_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix3fv, "u_it_model", 1, false)),
         .set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false)),
         .material{
-            .set_ambient = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_material.ambient")),
-            .set_diffuse = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_material.diffuse")),
-            .set_specular = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_material.specular")),
             .set_shininess = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_material.shininess")),
         },
         .light{
@@ -89,16 +101,17 @@ auto create_source_shader(const std::filesystem::path& root) {
     return std::make_tuple(std::move(sp), std::move(set_transform), std::move(set_light_color));
 }
 
-struct VN {
+struct VNT {
     gfx::va_attrib_field<3, float> vert;
     gfx::va_attrib_field<3, float> normal;
+    gfx::va_attrib_field<2, float> tex_coords;
 };
 
 template <std::size_t vertices_extent, std::size_t indices_extent>
-auto create_buffers(std::span<const VN, vertices_extent> vns, std::span<const unsigned, indices_extent> indices) {
+auto create_buffers(std::span<const VNT, vertices_extent> vnts, std::span<const unsigned, indices_extent> indices) {
     gfx::vertex_array_builder va_builder;
-    va_builder.attributes_from<VN>();
-    auto vb = va_builder.buffer<gfx::buffer_type::array, gfx::buffer_usage::static_draw>(vns);
+    va_builder.attributes_from<VNT>();
+    auto vb = va_builder.buffer<gfx::buffer_type::array, gfx::buffer_usage::static_draw>(vnts);
     auto eb = va_builder.buffer<gfx::buffer_type::element_array, gfx::buffer_usage::static_draw>(indices);
     auto va = std::move(va_builder).submit();
     return std::make_tuple(std::move(vb), std::move(eb), std::move(va));
@@ -107,37 +120,37 @@ auto create_buffers(std::span<const VN, vertices_extent> vns, std::span<const un
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-braces"
 constexpr std::array cube_vertices{
-    // verts            | normals
+    // verts                 | normals            | tex coords
     // front face
-    VN{ +0.5f, +0.5f, +0.5f, +0.0f, +0.0f, +1.0f }, // top right
-    VN{ +0.5f, -0.5f, +0.5f, +0.0f, +0.0f, +1.0f }, // bottom right
-    VN{ -0.5f, -0.5f, +0.5f, +0.0f, +0.0f, +1.0f }, // bottom left
-    VN{ -0.5f, +0.5f, +0.5f, +0.0f, +0.0f, +1.0f }, // top left
+    VNT{ +0.5f, +0.5f, +0.5f, +0.0f, +0.0f, +1.0f, +1.0f, +1.0f }, // top right
+    VNT{ +0.5f, -0.5f, +0.5f, +0.0f, +0.0f, +1.0f, +1.0f, +0.0f }, // bottom right
+    VNT{ -0.5f, -0.5f, +0.5f, +0.0f, +0.0f, +1.0f, +0.0f, +0.0f }, // bottom left
+    VNT{ -0.5f, +0.5f, +0.5f, +0.0f, +0.0f, +1.0f, +0.0f, +1.0f }, // top left
     // right face
-    VN{ +0.5f, +0.5f, +0.5f, +1.0f, +0.0f, +0.0f }, // top right
-    VN{ +0.5f, -0.5f, +0.5f, +1.0f, +0.0f, +0.0f }, // bottom right
-    VN{ +0.5f, -0.5f, -0.5f, +1.0f, +0.0f, +0.0f }, // bottom left
-    VN{ +0.5f, +0.5f, -0.5f, +1.0f, +0.0f, +0.0f }, // top left
+    VNT{ +0.5f, +0.5f, +0.5f, +1.0f, +0.0f, +0.0f, +1.0f, +1.0f }, // top right
+    VNT{ +0.5f, -0.5f, +0.5f, +1.0f, +0.0f, +0.0f, +1.0f, +0.0f }, // bottom right
+    VNT{ +0.5f, -0.5f, -0.5f, +1.0f, +0.0f, +0.0f, +0.0f, +0.0f }, // bottom left
+    VNT{ +0.5f, +0.5f, -0.5f, +1.0f, +0.0f, +0.0f, +0.0f, +1.0f }, // top left
     // back face
-    VN{ +0.5f, +0.5f, -0.5f, +0.0f, +0.0f, -1.0f }, // top right
-    VN{ +0.5f, -0.5f, -0.5f, +0.0f, +0.0f, -1.0f }, // bottom right
-    VN{ -0.5f, -0.5f, -0.5f, +0.0f, +0.0f, -1.0f }, // bottom left
-    VN{ -0.5f, +0.5f, -0.5f, +0.0f, +0.0f, -1.0f }, // top left
+    VNT{ +0.5f, +0.5f, -0.5f, +0.0f, +0.0f, -1.0f, +1.0f, +1.0f }, // top right
+    VNT{ +0.5f, -0.5f, -0.5f, +0.0f, +0.0f, -1.0f, +1.0f, +0.0f }, // bottom right
+    VNT{ -0.5f, -0.5f, -0.5f, +0.0f, +0.0f, -1.0f, +0.0f, +0.0f }, // bottom left
+    VNT{ -0.5f, +0.5f, -0.5f, +0.0f, +0.0f, -1.0f, +0.0f, +1.0f }, // top left
     // left face
-    VN{ -0.5f, +0.5f, -0.5f, -1.0f, +0.0f, +0.0f }, // top right
-    VN{ -0.5f, -0.5f, -0.5f, -1.0f, +0.0f, +0.0f }, // bottom right
-    VN{ -0.5f, -0.5f, +0.5f, -1.0f, +0.0f, +0.0f }, // bottom left
-    VN{ -0.5f, +0.5f, +0.5f, -1.0f, +0.0f, +0.0f }, // top left
+    VNT{ -0.5f, +0.5f, -0.5f, -1.0f, +0.0f, +0.0f, +1.0f, +1.0f }, // top right
+    VNT{ -0.5f, -0.5f, -0.5f, -1.0f, +0.0f, +0.0f, +1.0f, +0.0f }, // bottom right
+    VNT{ -0.5f, -0.5f, +0.5f, -1.0f, +0.0f, +0.0f, +0.0f, +0.0f }, // bottom left
+    VNT{ -0.5f, +0.5f, +0.5f, -1.0f, +0.0f, +0.0f, +0.0f, +1.0f }, // top left
     // top face
-    VN{ +0.5f, +0.5f, +0.5f, +0.0f, +1.0f, +0.0f }, // top right
-    VN{ +0.5f, +0.5f, -0.5f, +0.0f, +1.0f, +0.0f }, // bottom right
-    VN{ -0.5f, +0.5f, -0.5f, +0.0f, +1.0f, +0.0f }, // bottom left
-    VN{ -0.5f, +0.5f, +0.5f, +0.0f, +1.0f, +0.0f }, // top left
+    VNT{ +0.5f, +0.5f, +0.5f, +0.0f, +1.0f, +0.0f, +1.0f, +1.0f }, // top right
+    VNT{ +0.5f, +0.5f, -0.5f, +0.0f, +1.0f, +0.0f, +1.0f, +0.0f }, // bottom right
+    VNT{ -0.5f, +0.5f, -0.5f, +0.0f, +1.0f, +0.0f, +0.0f, +0.0f }, // bottom left
+    VNT{ -0.5f, +0.5f, +0.5f, +0.0f, +1.0f, +0.0f, +0.0f, +1.0f }, // top left
     // bottom face
-    VN{ +0.5f, -0.5f, +0.5f, +0.0f, -1.0f, +0.0f }, // top right
-    VN{ +0.5f, -0.5f, -0.5f, +0.0f, -1.0f, +0.0f }, // bottom right
-    VN{ -0.5f, -0.5f, -0.5f, +0.0f, -1.0f, +0.0f }, // bottom left
-    VN{ -0.5f, -0.5f, +0.5f, +0.0f, -1.0f, +0.0f }, // top left
+    VNT{ +0.5f, -0.5f, +0.5f, +0.0f, -1.0f, +0.0f, +1.0f, +1.0f }, // top right
+    VNT{ +0.5f, -0.5f, -0.5f, +0.0f, -1.0f, +0.0f, +1.0f, +0.0f }, // bottom right
+    VNT{ -0.5f, -0.5f, -0.5f, +0.0f, -1.0f, +0.0f, +0.0f, +0.0f }, // bottom left
+    VNT{ -0.5f, -0.5f, +0.5f, +0.0f, -1.0f, +0.0f, +0.0f, +1.0f }, // top left
 };
 #pragma GCC diagnostic pop
 
@@ -150,15 +163,13 @@ constexpr std::array indices{
     20u, 21u, 23u, 21u, 22u, 23u, // Bottom face
 };
 
-struct material {
-    glm::vec3 ambient;
-    glm::vec3 diffuse;
-    glm::vec3 specular;
-    float shininess;
-};
-
 struct render_object {
     glm::vec3 position;
+    struct material {
+        gfx::texture<gfx::texture_type::texture_2d> diffuse;
+        gfx::texture<gfx::texture_type::texture_2d> specular;
+        float shininess;
+    };
     material material;
 };
 
@@ -195,7 +206,7 @@ int main(int argc, char** argv) {
     spdlog::set_level(spdlog::level::info);
 
     game::graphics graphics =
-        *ASSERT_VAL(game::initialize_graphics("02_material", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+        *ASSERT_VAL(game::initialize_graphics("03_lightmap", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
     keys_input_state kis;
     (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
@@ -309,18 +320,16 @@ int main(int argc, char** argv) {
         render_object{
             .position{ 0.0f, 0.0f, 0.0f },
             .material{
-                .ambient{ 0.1745f, 0.01175f, 0.01175f },
-                .diffuse{ 0.61424f, 0.04136f, 0.04136f },
-                .specular{ 0.727811f, 0.626959f, 0.626959f },
+                .diffuse = create_texture(root / "textures/03_lightmap_diffuse.png"),
+                .specular = create_texture(root / "textures/03_lightmap_specular.png"),
                 .shininess = 128.0f * 0.6f,
             },
         },
         render_object{
             .position{ 5.0f, 0.0f, 0.0f },
             .material{
-                .ambient{ 1.0f, 0.5f, 0.31f },
-                .diffuse{ 1.0f, 0.5f, 0.31f },
-                .specular{ 0.5f, 0.5f, 0.5f },
+                .diffuse = create_texture(root / "textures/03_lightmap_diffuse.png"),
+                .specular = create_texture(root / "textures/03_lightmap_specular.png"),
                 .shininess = 32.0f,
             },
         },
@@ -376,27 +385,18 @@ int main(int argc, char** argv) {
 
         // objects
         {
-            const auto& [vb, eb, va] = object_buffers;
-            gfx::draw draw{ object_shader.sp.bind(), va };
-
+            auto bound_sp = object_shader.sp.bind();
+            object_shader.light.set_position(bound_sp, light.position.x, light.position.y, light.position.z);
+            object_shader.light.set_ambient(bound_sp, light.ambient.r, light.ambient.g, light.ambient.b);
+            object_shader.light.set_diffuse(bound_sp, light.diffuse.r, light.diffuse.g, light.diffuse.b);
+            object_shader.light.set_specular(bound_sp, light.specular.r, light.specular.g, light.specular.b);
             const auto& view_position = render.camera.tf.tr;
-            object_shader.set_view_pos(draw.sp(), view_position.x, view_position.y, view_position.z);
-
-            object_shader.light.set_position(draw.sp(), light.position.x, light.position.y, light.position.z);
-            object_shader.light.set_ambient(draw.sp(), light.ambient.r, light.ambient.g, light.ambient.b);
-            object_shader.light.set_diffuse(draw.sp(), light.diffuse.r, light.diffuse.g, light.diffuse.b);
-            object_shader.light.set_specular(draw.sp(), light.specular.r, light.specular.g, light.specular.b);
+            object_shader.set_view_pos(bound_sp, view_position.x, view_position.y, view_position.z);
 
             for (const auto& [position, material] : cube_objects) {
-                object_shader.material.set_ambient(
-                    draw.sp(), material.ambient.r, material.ambient.g, material.ambient.b
-                );
-                object_shader.material.set_diffuse(
-                    draw.sp(), material.diffuse.r, material.diffuse.g, material.diffuse.b
-                );
-                object_shader.material.set_specular(
-                    draw.sp(), material.specular.r, material.specular.g, material.specular.b
-                );
+                const auto& [vb, eb, va] = object_buffers;
+                gfx::draw draw{ std::move(bound_sp), va, material.diffuse, material.specular };
+
                 object_shader.material.set_shininess(draw.sp(), material.shininess);
 
                 const auto make_model =
@@ -429,9 +429,6 @@ int main(int argc, char** argv) {
             for (auto& [_, material] : cube_objects) {
                 ImGui::PushID(i++);
                 ImGui::Spacing();
-                ImGui::ColorEdit3("ambient", glm::value_ptr(material.ambient));
-                ImGui::ColorEdit3("diffuse", glm::value_ptr(material.diffuse));
-                ImGui::ColorEdit3("specular", glm::value_ptr(material.specular));
                 ImGui::SliderFloat("shininess", &material.shininess, 2.0f, 256, "%.0f", ImGuiSliderFlags_Logarithmic);
                 ImGui::PopID();
             }
