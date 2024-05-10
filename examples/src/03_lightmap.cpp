@@ -33,6 +33,7 @@ struct object_shader {
     struct material {
         // diffuse
         // specular
+        // emission
         uniform_setter<float> set_shininess;
     };
     material material;
@@ -46,6 +47,7 @@ struct object_shader {
     light light;
 
     uniform_setter<float, float, float> set_view_pos;
+    uniform_setter<float> set_time;
 };
 
 gfx::texture<gfx::texture_type::texture_2d> create_texture(const std::filesystem::path& image_path) {
@@ -68,7 +70,11 @@ object_shader create_object_shader(const std::filesystem::path& root) {
     auto sp = *ASSERT_VAL(gfx::shader_program::build(std::span{ shaders }));
     auto sp_bind = sp.bind();
 
-    constexpr std::array<std::string_view, 2> material_textures{ "u_material.diffuse", "u_material.specular" };
+    constexpr std::array<std::string_view, 3> material_textures{
+        "u_material.diffuse",
+        "u_material.specular",
+        "u_material.emission",
+    };
     sp_bind.initialize_tex_units(std::span{ material_textures });
 
     return object_shader{
@@ -86,6 +92,7 @@ object_shader create_object_shader(const std::filesystem::path& root) {
             .set_specular = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.specular")),
         },
         .set_view_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_view_pos")),
+        .set_time = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_time")),
     };
 }
 
@@ -168,6 +175,7 @@ struct render_object {
     struct material {
         gfx::texture<gfx::texture_type::texture_2d> diffuse;
         gfx::texture<gfx::texture_type::texture_2d> specular;
+        gfx::texture<gfx::texture_type::texture_2d> emission;
         float shininess;
     };
     material material;
@@ -322,6 +330,7 @@ int main(int argc, char** argv) {
             .material{
                 .diffuse = create_texture(root / "textures/03_lightmap_diffuse.png"),
                 .specular = create_texture(root / "textures/03_lightmap_specular.png"),
+                .emission = create_texture(root / "textures/03_lightmap_emission.jpg"),
                 .shininess = 128.0f * 0.6f,
             },
         },
@@ -330,6 +339,7 @@ int main(int argc, char** argv) {
             .material{
                 .diffuse = create_texture(root / "textures/03_lightmap_diffuse.png"),
                 .specular = create_texture(root / "textures/03_lightmap_specular.png"),
+                .emission = create_texture(root / "textures/03_lightmap_emission.jpg"),
                 .shininess = 32.0f,
             },
         },
@@ -361,10 +371,10 @@ int main(int argc, char** argv) {
         });
 
         // update
-        const std::chrono::duration<float> delta_time = time.calculate_delta();
+        const game::time_point time_point = time.calculate();
         const auto tr = calculate_tr(kis);
         const auto maybe_cursor_offset = calculate_cursor_offset(mis, cis);
-        camera_update(render.camera, delta_time, tr, maybe_cursor_offset);
+        camera_update(render.camera, time_point.delta_sec(), tr, maybe_cursor_offset);
 
         // render
         auto bound_render = render.bind(graphics.current_window, *graphics.state);
@@ -392,10 +402,11 @@ int main(int argc, char** argv) {
             object_shader.light.set_specular(bound_sp, light.specular.r, light.specular.g, light.specular.b);
             const auto& view_position = render.camera.tf.tr;
             object_shader.set_view_pos(bound_sp, view_position.x, view_position.y, view_position.z);
+            object_shader.set_time(bound_sp, time_point.now_sec().count());
 
             for (const auto& [position, material] : cube_objects) {
                 const auto& [vb, eb, va] = object_buffers;
-                gfx::draw draw{ std::move(bound_sp), va, material.diffuse, material.specular };
+                gfx::draw draw{ std::move(bound_sp), va, material.diffuse, material.specular, material.emission };
 
                 object_shader.material.set_shininess(draw.sp(), material.shininess);
 

@@ -3,6 +3,7 @@
 struct material {
     sampler2D diffuse;
     sampler2D specular;
+    sampler2D emission;
     float shininess;
 };
 
@@ -16,6 +17,7 @@ struct light {
 uniform material u_material;
 uniform light u_light;
 uniform vec3 u_view_pos;
+uniform float u_time;
 
 in vec3 msg_frag_pos;
 in vec3 msg_normal;
@@ -26,6 +28,7 @@ out vec4 frag_color;
 void main() {
     const vec3 material_diffuse = texture(u_material.diffuse, msg_tex_coords).rgb;
     const vec3 material_specular = texture(u_material.specular, msg_tex_coords).rgb;
+    const vec3 material_emission = texture(u_material.emission, vec2(msg_tex_coords.x, msg_tex_coords.y + u_time)).rgb;
 
     const vec3 ambient = u_light.ambient * material_diffuse;
 
@@ -39,6 +42,7 @@ void main() {
     const float specular_angle = max(dot(view_direction, reflect_direction), 0.0f);
     const vec3 specular = u_light.specular * material_specular * pow(specular_angle, u_material.shininess);
 
-    frag_color = vec4(ambient + diffuse + specular, 1.0);
-}
+    const vec3 emission = material_emission * (material_specular == vec3(0.0f, 0.0f, 0.0f) ? 1.0f : 0.0f);
 
+    frag_color = vec4(ambient + diffuse + specular + emission, 1.0);
+}

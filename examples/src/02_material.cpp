@@ -352,7 +352,7 @@ int main(int argc, char** argv) {
         });
 
         // update
-        const std::chrono::duration<float> delta_time = time.calculate_delta();
+        const std::chrono::duration<float> delta_time = time.calculate().delta_sec();
         const auto tr = calculate_tr(kis);
         const auto maybe_cursor_offset = calculate_cursor_offset(mis, cis);
         camera_update(render.camera, delta_time, tr, maybe_cursor_offset);
