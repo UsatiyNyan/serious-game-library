@@ -384,7 +384,7 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = source_buffers;
             const auto& [sp, set_transform, set_light_color] = source_shader;
 
-            gfx::draw draw{ sp.bind(), va };
+            gfx::draw draw{ sp.bind(), va.bind() };
 
             set_light_color(draw.sp(), light.ambient.r, light.ambient.g, light.ambient.b);
             const glm::mat4 model = glm::translate(glm::mat4(1.0f), light.position);
@@ -406,7 +406,7 @@ int main(int argc, char** argv) {
 
             for (const auto& [position, material] : cube_objects) {
                 const auto& [vb, eb, va] = object_buffers;
-                gfx::draw draw{ std::move(bound_sp), va, material.diffuse, material.specular, material.emission };
+                gfx::draw draw{ std::move(bound_sp), va.bind(), material.diffuse, material.specular, material.emission };
 
                 object_shader.material.set_shininess(draw.sp(), material.shininess);
 

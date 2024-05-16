@@ -504,7 +504,7 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = source_buffers;
             const auto& [sp, set_transform, set_light_color] = source_shader;
 
-            gfx::draw draw{ sp.bind(), va };
+            gfx::draw draw{ sp.bind(), va.bind() };
 
             for (const auto& point_light : point_lights) {
                 set_light_color(draw.sp(), point_light.ambient.r, point_light.ambient.g, point_light.ambient.b);
@@ -518,7 +518,7 @@ int main(int argc, char** argv) {
         // objects
         {
             const auto& [vb, eb, va] = object_buffers;
-            gfx::draw draw{ object_shader.sp.bind(), va, material.diffuse, material.specular };
+            gfx::draw draw{ object_shader.sp.bind(), va.bind(), material.diffuse, material.specular };
 
             const auto& view_position = render.camera.tf.tr;
             object_shader.set_view_pos(draw.sp(), view_position.x, view_position.y, view_position.z);

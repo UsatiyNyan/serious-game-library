@@ -36,7 +36,7 @@ public:
     glm::mat4 view;
 
 private:
-    std::reference_wrapper<sl::gfx::current_window> current_window_;
+    sl::gfx::current_window& current_window_;
 };
 
 

@@ -315,7 +315,7 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = source_buffers;
             const auto& [sp, set_transform, set_light_color] = source_shader;
 
-            gfx::draw draw{ sp.bind(), va };
+            gfx::draw draw{ sp.bind(), va.bind() };
 
             set_light_color(draw.sp(), source_color.r, source_color.g, source_color.b);
             const glm::mat4 model = glm::translate(glm::mat4(1.0f), source_position);
@@ -327,7 +327,7 @@ int main(int argc, char** argv) {
         // objects
         {
             const auto& [vb, eb, va] = object_buffers;
-            gfx::draw draw{ object_shader.sp.bind(), va };
+            gfx::draw draw{ object_shader.sp.bind(), va.bind() };
 
             object_shader.set_light_color(draw.sp(), source_color.r, source_color.g, source_color.b);
             object_shader.set_light_pos(draw.sp(), source_position.x, source_position.y, source_position.z);

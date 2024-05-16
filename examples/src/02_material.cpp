@@ -365,7 +365,7 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = source_buffers;
             const auto& [sp, set_transform, set_light_color] = source_shader;
 
-            gfx::draw draw{ sp.bind(), va };
+            gfx::draw draw{ sp.bind(), va.bind() };
 
             set_light_color(draw.sp(), light.ambient.r, light.ambient.g, light.ambient.b);
             const glm::mat4 model = glm::translate(glm::mat4(1.0f), light.position);
@@ -377,7 +377,7 @@ int main(int argc, char** argv) {
         // objects
         {
             const auto& [vb, eb, va] = object_buffers;
-            gfx::draw draw{ object_shader.sp.bind(), va };
+            gfx::draw draw{ object_shader.sp.bind(), va.bind() };
 
             const auto& view_position = render.camera.tf.tr;
             object_shader.set_view_pos(draw.sp(), view_position.x, view_position.y, view_position.z);

@@ -22,7 +22,7 @@ bound_render::bound_render(
     sl::gfx::current_window& current_window,
     const graphics_state& graphics_state
 )
-    : finalizer{ [](bound_render& self) { self.current_window_.get().swap_buffers(); } },
+    : finalizer{ [](bound_render& self) { self.current_window_.swap_buffers(); } },
       projection{ render.camera.projection(graphics_state.frame_buffer_size.get()) },
       view{ render.camera.view(render.world) }, current_window_{ current_window } {
     current_window.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
