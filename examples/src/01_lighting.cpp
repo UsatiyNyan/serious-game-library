@@ -19,6 +19,7 @@
 
 namespace game = sl::game;
 namespace gfx = sl::gfx;
+namespace rt = sl::rt;
 
 template <typename... Args>
 using uniform_setter = fu2::unique_function<void(const gfx::bound_shader_program&, Args...)>;
@@ -162,13 +163,13 @@ struct cursor_input_state {
 };
 
 int main(int argc, char** argv) {
-    const sl::rt::context rt_ctx{ argc, argv };
+    const rt::context rt_ctx{ argc, argv };
     const auto root = rt_ctx.path().parent_path();
 
     spdlog::set_level(spdlog::level::info);
 
     game::graphics graphics =
-        *ASSERT_VAL(game::initialize_graphics("01_lighting", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+        *ASSERT_VAL(game::graphics::initialize("01_lighting", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
     keys_input_state kis;
     (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
@@ -283,7 +284,7 @@ int main(int argc, char** argv) {
     float specular_strength = 0.5f;
     int shininess = 32;
 
-    game::time time;
+    rt::time time;
 
     while (!graphics.current_window.should_close()) {
         // input
@@ -315,30 +316,34 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = source_buffers;
             const auto& [sp, set_transform, set_light_color] = source_shader;
 
-            gfx::draw draw{ sp.bind(), va.bind() };
+            const auto bound_sp = sp.bind();
+            const auto bound_va = va.bind();
+            gfx::draw draw{ bound_sp, bound_va };
 
-            set_light_color(draw.sp(), source_color.r, source_color.g, source_color.b);
+            set_light_color(bound_sp, source_color.r, source_color.g, source_color.b);
             const glm::mat4 model = glm::translate(glm::mat4(1.0f), source_position);
             const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-            set_transform(draw.sp(), glm::value_ptr(transform));
+            set_transform(bound_sp, glm::value_ptr(transform));
             draw.elements(eb);
         }
 
         // objects
         {
             const auto& [vb, eb, va] = object_buffers;
-            gfx::draw draw{ object_shader.sp.bind(), va.bind() };
+            const auto bound_sp = object_shader.sp.bind();
+            const auto bound_va = va.bind();
+            gfx::draw draw{ bound_sp, bound_va };
 
-            object_shader.set_light_color(draw.sp(), source_color.r, source_color.g, source_color.b);
-            object_shader.set_light_pos(draw.sp(), source_position.x, source_position.y, source_position.z);
+            object_shader.set_light_color(bound_sp, source_color.r, source_color.g, source_color.b);
+            object_shader.set_light_pos(bound_sp, source_position.x, source_position.y, source_position.z);
             const auto& view_position = render.camera.tf.tr;
-            object_shader.set_view_pos(draw.sp(), view_position.x, view_position.y, view_position.z);
-            object_shader.set_ambient_strength(draw.sp(), ambient_strength);
-            object_shader.set_specular_strength(draw.sp(), specular_strength);
-            object_shader.set_shininess(draw.sp(), shininess);
+            object_shader.set_view_pos(bound_sp, view_position.x, view_position.y, view_position.z);
+            object_shader.set_ambient_strength(bound_sp, ambient_strength);
+            object_shader.set_specular_strength(bound_sp, specular_strength);
+            object_shader.set_shininess(bound_sp, shininess);
 
             for (const auto& cube : cube_objects) {
-                object_shader.set_object_color(draw.sp(), cube.color.r, cube.color.g, cube.color.b);
+                object_shader.set_object_color(bound_sp, cube.color.r, cube.color.g, cube.color.b);
                 const auto make_model =
                     sl::meta::pipeline{} //
                         .then([&pos = cube.pos](auto x) { return glm::translate(x, pos); })
@@ -350,9 +355,9 @@ int main(int argc, char** argv) {
                 const glm::mat4 model = make_model(glm::mat4(1.0f));
                 const glm::mat3 it_model = make_it_model(model);
                 const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-                object_shader.set_model(draw.sp(), glm::value_ptr(model));
-                object_shader.set_it_model(draw.sp(), glm::value_ptr(it_model));
-                object_shader.set_transform(draw.sp(), glm::value_ptr(transform));
+                object_shader.set_model(bound_sp, glm::value_ptr(model));
+                object_shader.set_it_model(bound_sp, glm::value_ptr(it_model));
+                object_shader.set_transform(bound_sp, glm::value_ptr(transform));
                 draw.elements(eb);
             }
         }

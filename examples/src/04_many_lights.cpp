@@ -19,6 +19,7 @@
 
 namespace game = sl::game;
 namespace gfx = sl::gfx;
+namespace rt = sl::rt;
 
 template <typename... Args>
 using uniform_setter = fu2::unique_function<void(const gfx::bound_shader_program&, Args...)>;
@@ -53,8 +54,8 @@ struct object_shader {
 };
 
 struct material {
-    gfx::texture<gfx::texture_type::texture_2d> diffuse;
-    gfx::texture<gfx::texture_type::texture_2d> specular;
+    // diffuse, specular
+    std::array<gfx::texture, 2> textures;
     float shininess;
 };
 
@@ -66,6 +67,7 @@ struct directional_light {
     glm::vec3 specular;
 };
 
+// alignment due to (3) https://registry.khronos.org/OpenGL/specs/gl/glspec46.core.pdf#page=168
 struct point_light {
     alignas(16) glm::vec3 position;
 
@@ -93,8 +95,8 @@ struct spot_light {
     float outer_cutoff;
 };
 
-gfx::texture<gfx::texture_type::texture_2d> create_texture(const std::filesystem::path& image_path) {
-    gfx::texture_builder<gfx::texture_type::texture_2d> tex_builder;
+gfx::texture create_texture(const std::filesystem::path& image_path) {
+    gfx::texture_builder tex_builder{ gfx::texture_type::texture_2d };
     tex_builder.set_wrap_s(gfx::texture_wrap::repeat);
     tex_builder.set_wrap_t(gfx::texture_wrap::repeat);
     tex_builder.set_min_filter(gfx::texture_filter::nearest);
@@ -262,13 +264,13 @@ struct cursor_input_state {
 };
 
 int main(int argc, char** argv) {
-    const sl::rt::context rt_ctx{ argc, argv };
+    const rt::context rt_ctx{ argc, argv };
     const auto root = rt_ctx.path().parent_path();
 
     spdlog::set_level(spdlog::level::info);
 
     game::graphics graphics =
-        *ASSERT_VAL(game::initialize_graphics("04_many_lights", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+        *ASSERT_VAL(game::graphics::initialize("04_many_lights", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
     keys_input_state kis;
     (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
@@ -378,8 +380,10 @@ int main(int argc, char** argv) {
     const auto source_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
 
     material material{
-        .diffuse = create_texture(root / "textures/03_lightmap_diffuse.png"),
-        .specular = create_texture(root / "textures/03_lightmap_specular.png"),
+        .textures{
+            create_texture(root / "textures/03_lightmap_diffuse.png"),
+            create_texture(root / "textures/03_lightmap_specular.png"),
+        },
         .shininess = 128.0f * 0.6f,
     };
 
@@ -463,7 +467,7 @@ int main(int argc, char** argv) {
         object_shader.set_spot_light_size(bound_sp, static_cast<std::uint32_t>(spot_lights.size()));
     }
 
-    game::time time;
+    rt::time time;
 
     while (!graphics.current_window.should_close()) {
         // input
@@ -482,7 +486,7 @@ int main(int argc, char** argv) {
         });
 
         // update
-        const game::time_point time_point = time.calculate();
+        const rt::time_point time_point = time.calculate();
         const auto tr = calculate_tr(kis);
         const auto maybe_cursor_offset = calculate_cursor_offset(mis, cis);
         camera_update(render.camera, time_point.delta_sec(), tr, maybe_cursor_offset);
@@ -504,13 +508,15 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = source_buffers;
             const auto& [sp, set_transform, set_light_color] = source_shader;
 
-            gfx::draw draw{ sp.bind(), va.bind() };
+            const auto bound_sp = sp.bind();
+            const auto bound_va = va.bind();
+            gfx::draw draw{ bound_sp, bound_va };
 
             for (const auto& point_light : point_lights) {
-                set_light_color(draw.sp(), point_light.ambient.r, point_light.ambient.g, point_light.ambient.b);
+                set_light_color(bound_sp, point_light.ambient.r, point_light.ambient.g, point_light.ambient.b);
                 const glm::mat4 transform =
                     bound_render.projection * bound_render.view * glm::translate(glm::mat4(1.0f), point_light.position);
-                set_transform(draw.sp(), glm::value_ptr(transform));
+                set_transform(bound_sp, glm::value_ptr(transform));
                 draw.elements(eb);
             }
         }
@@ -518,24 +524,26 @@ int main(int argc, char** argv) {
         // objects
         {
             const auto& [vb, eb, va] = object_buffers;
-            gfx::draw draw{ object_shader.sp.bind(), va.bind(), material.diffuse, material.specular };
+            const auto bound_sp = object_shader.sp.bind();
+            const auto bound_va = va.bind();
+            gfx::draw draw{ bound_sp, bound_va, std::span<const gfx::texture, 2>{ material.textures } };
 
             const auto& view_position = render.camera.tf.tr;
-            object_shader.set_view_pos(draw.sp(), view_position.x, view_position.y, view_position.z);
+            object_shader.set_view_pos(bound_sp, view_position.x, view_position.y, view_position.z);
 
-            object_shader.material.set_shininess(draw.sp(), material.shininess);
+            object_shader.material.set_shininess(bound_sp, material.shininess);
 
             object_shader.directional_light.set_direction(
-                draw.sp(), directional_light.direction.x, directional_light.direction.y, directional_light.direction.z
+                bound_sp, directional_light.direction.x, directional_light.direction.y, directional_light.direction.z
             );
             object_shader.directional_light.set_ambient(
-                draw.sp(), directional_light.ambient.r, directional_light.ambient.g, directional_light.ambient.b
+                bound_sp, directional_light.ambient.r, directional_light.ambient.g, directional_light.ambient.b
             );
             object_shader.directional_light.set_diffuse(
-                draw.sp(), directional_light.diffuse.r, directional_light.diffuse.g, directional_light.diffuse.b
+                bound_sp, directional_light.diffuse.r, directional_light.diffuse.g, directional_light.diffuse.b
             );
             object_shader.directional_light.set_specular(
-                draw.sp(), directional_light.specular.r, directional_light.specular.g, directional_light.specular.b
+                bound_sp, directional_light.specular.r, directional_light.specular.g, directional_light.specular.b
             );
 
             for (const auto& [index, position] : ranges::views::enumerate(cube_positions)) {
@@ -552,9 +560,9 @@ int main(int argc, char** argv) {
                 const glm::mat4 model = make_model(glm::mat4(1.0f));
                 const glm::mat3 it_model = make_it_model(model);
                 const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-                object_shader.set_model(draw.sp(), glm::value_ptr(model));
-                object_shader.set_it_model(draw.sp(), glm::value_ptr(it_model));
-                object_shader.set_transform(draw.sp(), glm::value_ptr(transform));
+                object_shader.set_model(bound_sp, glm::value_ptr(model));
+                object_shader.set_it_model(bound_sp, glm::value_ptr(it_model));
+                object_shader.set_transform(bound_sp, glm::value_ptr(transform));
                 draw.elements(eb);
             }
         }

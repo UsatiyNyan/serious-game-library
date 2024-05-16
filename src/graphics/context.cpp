@@ -6,7 +6,7 @@
 
 namespace sl::game {
 
-tl::optional<graphics> initialize_graphics(std::string_view title, glm::ivec2 size, glm::fvec4 clear_color) {
+tl::optional<graphics> graphics::initialize(std::string_view title, glm::ivec2 size, glm::fvec4 clear_color) {
     constexpr gfx::context::options context_options{ 4, 6, GLFW_OPENGL_CORE_PROFILE };
     auto context = gfx::context::create(context_options);
     if (!context) {

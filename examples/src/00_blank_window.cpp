@@ -15,7 +15,7 @@ int main() {
     spdlog::set_level(spdlog::level::debug);
 
     game::graphics gfx =
-        *ASSERT_VAL(game::initialize_graphics("00_blank_window", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+        *ASSERT_VAL(game::graphics::initialize("00_blank_window", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
     game::generic_input<bool(const sl::gfx::current_window&), 1> is_esc_pressed;
     auto detach_is_esc_pressed =

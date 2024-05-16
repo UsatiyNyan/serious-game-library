@@ -6,4 +6,3 @@
 
 #include "sl/game/graphics.hpp"
 #include "sl/game/input.hpp"
-#include "sl/game/time.hpp"

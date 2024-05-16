@@ -19,6 +19,7 @@
 
 namespace game = sl::game;
 namespace gfx = sl::gfx;
+namespace rt = sl::rt;
 
 template <typename... Args>
 using uniform_setter = fu2::unique_function<void(const gfx::bound_shader_program&, Args...)>;
@@ -189,13 +190,13 @@ struct cursor_input_state {
 };
 
 int main(int argc, char** argv) {
-    const sl::rt::context rt_ctx{ argc, argv };
+    const rt::context rt_ctx{ argc, argv };
     const auto root = rt_ctx.path().parent_path();
 
     spdlog::set_level(spdlog::level::info);
 
     game::graphics graphics =
-        *ASSERT_VAL(game::initialize_graphics("02_material", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+        *ASSERT_VAL(game::graphics::initialize("02_material", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
     keys_input_state kis;
     (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
@@ -333,7 +334,7 @@ int main(int argc, char** argv) {
         .specular{ 1.0f, 1.0f, 1.0f },
     };
 
-    game::time time;
+    rt::time time;
 
     while (!graphics.current_window.should_close()) {
         // input
@@ -365,39 +366,43 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = source_buffers;
             const auto& [sp, set_transform, set_light_color] = source_shader;
 
-            gfx::draw draw{ sp.bind(), va.bind() };
+            const auto bound_sp = sp.bind();
+            const auto bound_va = va.bind();
+            gfx::draw draw{ bound_sp, bound_va };
 
-            set_light_color(draw.sp(), light.ambient.r, light.ambient.g, light.ambient.b);
+            set_light_color(bound_sp, light.ambient.r, light.ambient.g, light.ambient.b);
             const glm::mat4 model = glm::translate(glm::mat4(1.0f), light.position);
             const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-            set_transform(draw.sp(), glm::value_ptr(transform));
+            set_transform(bound_sp, glm::value_ptr(transform));
             draw.elements(eb);
         }
 
         // objects
         {
             const auto& [vb, eb, va] = object_buffers;
-            gfx::draw draw{ object_shader.sp.bind(), va.bind() };
+            const auto bound_sp = object_shader.sp.bind();
+            const auto bound_va = va.bind();
+            gfx::draw draw{ bound_sp, bound_va };
 
             const auto& view_position = render.camera.tf.tr;
-            object_shader.set_view_pos(draw.sp(), view_position.x, view_position.y, view_position.z);
+            object_shader.set_view_pos(bound_sp, view_position.x, view_position.y, view_position.z);
 
-            object_shader.light.set_position(draw.sp(), light.position.x, light.position.y, light.position.z);
-            object_shader.light.set_ambient(draw.sp(), light.ambient.r, light.ambient.g, light.ambient.b);
-            object_shader.light.set_diffuse(draw.sp(), light.diffuse.r, light.diffuse.g, light.diffuse.b);
-            object_shader.light.set_specular(draw.sp(), light.specular.r, light.specular.g, light.specular.b);
+            object_shader.light.set_position(bound_sp, light.position.x, light.position.y, light.position.z);
+            object_shader.light.set_ambient(bound_sp, light.ambient.r, light.ambient.g, light.ambient.b);
+            object_shader.light.set_diffuse(bound_sp, light.diffuse.r, light.diffuse.g, light.diffuse.b);
+            object_shader.light.set_specular(bound_sp, light.specular.r, light.specular.g, light.specular.b);
 
             for (const auto& [position, material] : cube_objects) {
                 object_shader.material.set_ambient(
-                    draw.sp(), material.ambient.r, material.ambient.g, material.ambient.b
+                    bound_sp, material.ambient.r, material.ambient.g, material.ambient.b
                 );
                 object_shader.material.set_diffuse(
-                    draw.sp(), material.diffuse.r, material.diffuse.g, material.diffuse.b
+                    bound_sp, material.diffuse.r, material.diffuse.g, material.diffuse.b
                 );
                 object_shader.material.set_specular(
-                    draw.sp(), material.specular.r, material.specular.g, material.specular.b
+                    bound_sp, material.specular.r, material.specular.g, material.specular.b
                 );
-                object_shader.material.set_shininess(draw.sp(), material.shininess);
+                object_shader.material.set_shininess(bound_sp, material.shininess);
 
                 const auto make_model =
                     sl::meta::pipeline{} //
@@ -410,9 +415,9 @@ int main(int argc, char** argv) {
                 const glm::mat4 model = make_model(glm::mat4(1.0f));
                 const glm::mat3 it_model = make_it_model(model);
                 const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-                object_shader.set_model(draw.sp(), glm::value_ptr(model));
-                object_shader.set_it_model(draw.sp(), glm::value_ptr(it_model));
-                object_shader.set_transform(draw.sp(), glm::value_ptr(transform));
+                object_shader.set_model(bound_sp, glm::value_ptr(model));
+                object_shader.set_it_model(bound_sp, glm::value_ptr(it_model));
+                object_shader.set_transform(bound_sp, glm::value_ptr(transform));
                 draw.elements(eb);
             }
         }

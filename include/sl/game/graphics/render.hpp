@@ -39,5 +39,4 @@ private:
     sl::gfx::current_window& current_window_;
 };
 
-
 } // namespace sl::game

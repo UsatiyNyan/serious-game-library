@@ -19,6 +19,7 @@
 
 namespace game = sl::game;
 namespace gfx = sl::gfx;
+namespace rt = sl::rt;
 
 template <typename... Args>
 using uniform_setter = fu2::unique_function<void(const gfx::bound_shader_program&, Args...)>;
@@ -50,8 +51,8 @@ struct object_shader {
     uniform_setter<float> set_time;
 };
 
-gfx::texture<gfx::texture_type::texture_2d> create_texture(const std::filesystem::path& image_path) {
-    gfx::texture_builder<gfx::texture_type::texture_2d> tex_builder;
+gfx::texture create_texture(const std::filesystem::path& image_path) {
+    gfx::texture_builder tex_builder{ gfx::texture_type::texture_2d };
     tex_builder.set_wrap_s(gfx::texture_wrap::repeat);
     tex_builder.set_wrap_t(gfx::texture_wrap::repeat);
     tex_builder.set_min_filter(gfx::texture_filter::nearest);
@@ -173,9 +174,8 @@ constexpr std::array indices{
 struct render_object {
     glm::vec3 position;
     struct material {
-        gfx::texture<gfx::texture_type::texture_2d> diffuse;
-        gfx::texture<gfx::texture_type::texture_2d> specular;
-        gfx::texture<gfx::texture_type::texture_2d> emission;
+        // diffuse, specular, emission
+        std::array<gfx::texture, 3> textures;
         float shininess;
     };
     material material;
@@ -208,13 +208,13 @@ struct cursor_input_state {
 };
 
 int main(int argc, char** argv) {
-    const sl::rt::context rt_ctx{ argc, argv };
+    const rt::context rt_ctx{ argc, argv };
     const auto root = rt_ctx.path().parent_path();
 
     spdlog::set_level(spdlog::level::info);
 
     game::graphics graphics =
-        *ASSERT_VAL(game::initialize_graphics("03_lightmap", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+        *ASSERT_VAL(game::graphics::initialize("03_lightmap", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
     keys_input_state kis;
     (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
@@ -328,18 +328,22 @@ int main(int argc, char** argv) {
         render_object{
             .position{ 0.0f, 0.0f, 0.0f },
             .material{
-                .diffuse = create_texture(root / "textures/03_lightmap_diffuse.png"),
-                .specular = create_texture(root / "textures/03_lightmap_specular.png"),
-                .emission = create_texture(root / "textures/03_lightmap_emission.jpg"),
+                .textures{
+                    create_texture(root / "textures/03_lightmap_diffuse.png"),
+                    create_texture(root / "textures/03_lightmap_specular.png"),
+                    create_texture(root / "textures/03_lightmap_emission.jpg"),
+                },
                 .shininess = 128.0f * 0.6f,
             },
         },
         render_object{
             .position{ 5.0f, 0.0f, 0.0f },
             .material{
-                .diffuse = create_texture(root / "textures/03_lightmap_diffuse.png"),
-                .specular = create_texture(root / "textures/03_lightmap_specular.png"),
-                .emission = create_texture(root / "textures/03_lightmap_emission.jpg"),
+                .textures{
+                    create_texture(root / "textures/03_lightmap_diffuse.png"),
+                    create_texture(root / "textures/03_lightmap_specular.png"),
+                    create_texture(root / "textures/03_lightmap_emission.jpg"),
+                },
                 .shininess = 32.0f,
             },
         },
@@ -352,7 +356,7 @@ int main(int argc, char** argv) {
         .specular{ 1.0f, 1.0f, 1.0f },
     };
 
-    game::time time;
+    rt::time time;
 
     while (!graphics.current_window.should_close()) {
         // input
@@ -371,7 +375,7 @@ int main(int argc, char** argv) {
         });
 
         // update
-        const game::time_point time_point = time.calculate();
+        const rt::time_point time_point = time.calculate();
         const auto tr = calculate_tr(kis);
         const auto maybe_cursor_offset = calculate_cursor_offset(mis, cis);
         camera_update(render.camera, time_point.delta_sec(), tr, maybe_cursor_offset);
@@ -384,13 +388,14 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = source_buffers;
             const auto& [sp, set_transform, set_light_color] = source_shader;
 
-            gfx::draw draw{ sp.bind(), va.bind() };
+            const auto bound_sp = sp.bind();
+            const auto bound_va = va.bind();
 
-            set_light_color(draw.sp(), light.ambient.r, light.ambient.g, light.ambient.b);
+            set_light_color(bound_sp, light.ambient.r, light.ambient.g, light.ambient.b);
             const glm::mat4 model = glm::translate(glm::mat4(1.0f), light.position);
             const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-            set_transform(draw.sp(), glm::value_ptr(transform));
-            draw.elements(eb);
+            set_transform(bound_sp, glm::value_ptr(transform));
+            gfx::draw{ bound_sp, bound_va }.elements(eb);
         }
 
         // objects
@@ -406,9 +411,10 @@ int main(int argc, char** argv) {
 
             for (const auto& [position, material] : cube_objects) {
                 const auto& [vb, eb, va] = object_buffers;
-                gfx::draw draw{ std::move(bound_sp), va.bind(), material.diffuse, material.specular, material.emission };
+                const auto bound_va = va.bind();
+                gfx::draw draw{ bound_sp, bound_va, std::span{ material.textures } };
 
-                object_shader.material.set_shininess(draw.sp(), material.shininess);
+                object_shader.material.set_shininess(bound_sp, material.shininess);
 
                 const auto make_model =
                     sl::meta::pipeline{} //
@@ -421,9 +427,9 @@ int main(int argc, char** argv) {
                 const glm::mat4 model = make_model(glm::mat4(1.0f));
                 const glm::mat3 it_model = make_it_model(model);
                 const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-                object_shader.set_model(draw.sp(), glm::value_ptr(model));
-                object_shader.set_it_model(draw.sp(), glm::value_ptr(it_model));
-                object_shader.set_transform(draw.sp(), glm::value_ptr(transform));
+                object_shader.set_model(bound_sp, glm::value_ptr(model));
+                object_shader.set_it_model(bound_sp, glm::value_ptr(it_model));
+                object_shader.set_transform(bound_sp, glm::value_ptr(transform));
                 draw.elements(eb);
             }
         }
