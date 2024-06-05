@@ -412,7 +412,8 @@ int main(int argc, char** argv) {
             for (const auto& [position, material] : cube_objects) {
                 const auto& [vb, eb, va] = object_buffers;
                 const auto bound_va = va.bind();
-                gfx::draw draw{ bound_sp, bound_va, std::span{ material.textures } };
+                const auto bound_texs = gfx::activate_textures(material.textures);
+                gfx::draw draw{ bound_sp, bound_va, bound_texs };
 
                 object_shader.material.set_shininess(bound_sp, material.shininess);
 

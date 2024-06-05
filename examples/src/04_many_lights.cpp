@@ -526,7 +526,8 @@ int main(int argc, char** argv) {
             const auto& [vb, eb, va] = object_buffers;
             const auto bound_sp = object_shader.sp.bind();
             const auto bound_va = va.bind();
-            gfx::draw draw{ bound_sp, bound_va, std::span<const gfx::texture, 2>{ material.textures } };
+            const auto bound_texs = gfx::activate_textures(material.textures);
+            gfx::draw draw{ bound_sp, bound_va, bound_texs };
 
             const auto& view_position = render.camera.tf.tr;
             object_shader.set_view_pos(bound_sp, view_position.x, view_position.y, view_position.z);

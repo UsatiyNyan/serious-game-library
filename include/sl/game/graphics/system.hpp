@@ -4,16 +4,17 @@
 
 #pragma once
 
-#include "sl/game/layer.hpp"
-#include <sl/rt/time.hpp>
+#include "sl/game/graphics/component.hpp"
+#include "sl/game/storage.hpp"
+
+#include <entt/fwd.hpp>
 
 namespace sl::game {
 
-class graphics_system {
-public:
-    void render(layer& layer, rt::time_point time_point);
-
-private:
-};
+void graphics_system(
+    storage<shader_component>& shader_storage,
+    storage<vertex_component>& vertex_storage,
+    entt::registry& registry
+);
 
 } // namespace sl::game
