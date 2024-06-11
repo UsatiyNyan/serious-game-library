@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include "sl/game/graphics/render.hpp"
+
+#include <sl/gfx/primitives.hpp>
 #include <sl/gfx/shader/program.hpp>
 #include <sl/gfx/vtx/texture.hpp>
 #include <sl/gfx/vtx/vertex_array.hpp>
@@ -41,6 +44,14 @@ struct vertex_component {
     gfx::vertex_array va;
 };
 
+template <typename T, gfx::buffer_type type, gfx::buffer_usage usage>
+struct buffer_component {
+    struct id {
+        meta::unique_string id;
+    };
+    gfx::buffer<T, type, usage> b;
+};
+
 struct shader_component {
     struct id {
         meta::unique_string id;
@@ -48,10 +59,14 @@ struct shader_component {
 
     gfx::shader_program sp;
 
-    component_callback<void(const gfx::bound_shader_program&, entt::registry&)> setup;
-    component_callback<
-        void(const gfx::bound_shader_program&, const gfx::bound_vertex_array&, entt::registry&, std::span<const entt::entity>)>
-        draw;
+    using draw = component_callback<void(const gfx::bound_vertex_array&, std::span<const entt::entity>)>;
+    component_callback<draw(const bound_render&, const gfx::bound_shader_program&, entt::registry&)> setup;
+};
+
+struct transform_component {
+    gfx::transform tf;
+
+    [[nodiscard]] glm::vec3 direction(const gfx::basis& world) const { return tf.rot * world.forward(); }
 };
 
 } // namespace sl::game

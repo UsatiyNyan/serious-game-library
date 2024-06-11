@@ -6,3 +6,4 @@
 
 #include "sl/game/graphics/context.hpp"
 #include "sl/game/graphics/render.hpp"
+#include "sl/game/graphics/system.hpp"

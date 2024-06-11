@@ -18,13 +18,14 @@ bound_render render::bind(sl::gfx::current_window& current_window, const graphic
 }
 
 bound_render::bound_render(
-    const render& render,
+    const render& a_render,
     sl::gfx::current_window& current_window,
     const graphics_state& graphics_state
 )
-    : finalizer{ [](bound_render& self) { self.current_window_.swap_buffers(); } },
-      projection{ render.camera.projection(graphics_state.frame_buffer_size.get()) },
-      view{ render.camera.view(render.world) }, current_window_{ current_window } {
+    : finalizer{ [](bound_render& self) { self.current_window_.swap_buffers(); } }, //
+      world{ a_render.world }, camera{ a_render.camera },
+      projection{ camera.projection(graphics_state.frame_buffer_size.get()) }, view{ camera.view(world) },
+      current_window_{ current_window } {
     current_window.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 

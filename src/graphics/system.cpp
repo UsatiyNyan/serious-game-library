@@ -16,11 +16,12 @@
 
 namespace sl::game {
 
-// TODO: framebuffer as a "return value"
+// TODO: framebuffer as a "return value".
 // Im thinking that leaving this as a function is much better.
 // Having to keep track of appearing entities/components (essentially caching)
 // might come with other more subtle performance costs.
 void graphics_system(
+    const bound_render& bound_render,
     storage<shader_component>& shader_storage,
     storage<vertex_component>& vertex_storage,
     entt::registry& registry
@@ -48,12 +49,15 @@ void graphics_system(
         }
 
         auto& shader_component = maybe_shader_component.value();
-        if (!ASSUME_VAL(shader_component->setup && shader_component->draw)) {
+        if (!ASSUME_VAL(shader_component->setup)) {
             continue;
         }
 
         const auto bound_sp = shader_component->sp.bind();
-        shader_component->setup(bound_sp, registry);
+        auto draw = shader_component->setup(bound_render, bound_sp, registry);
+        if (!ASSUME_VAL(draw)) {
+            continue;
+        }
 
         for (const auto& vertex_id : vertex_ids) {
             const auto maybe_vertex_component = vertex_storage.lookup(vertex_id);
@@ -67,7 +71,7 @@ void graphics_system(
             const auto& entities = ve_it.value();
 
             const auto bound_va = vertex_component->va.bind();
-            shader_component->draw(bound_sp, bound_va, registry, std::span{ entities });
+            draw(bound_va, std::span{ entities });
         }
     }
 }
