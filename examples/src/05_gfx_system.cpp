@@ -261,6 +261,7 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                        bound_pl_base = pl_buffer.bind_base(1),
                        bound_sl_base = sl_buffer.bind_base(2)]( //
                        const gfx::bound_vertex_array& bound_va,
+                       vertex_component::draw_type& vertex_draw,
                        std::span<const entt::entity> entities
                    ) {
                 for (const entt::entity entity : entities) {
@@ -273,9 +274,6 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                     const auto bound_texs = gfx::activate_textures(
                         texs | ranges::views::transform([](const auto& x) -> const gfx::texture& { return x->tex; })
                     );
-
-                    auto eb_id = *ASSERT_VAL(layer.registry.try_get<element_buffer_component::id>(entity));
-                    auto eb = *ASSERT_VAL(layer.storage.element_buffer.lookup(eb_id.id));
 
                     auto tf = *ASSERT_VAL(layer.registry.try_get<transform_component>(entity));
                     const auto make_model = sl::meta::pipeline{} //
@@ -291,7 +289,8 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                     set_it_model(bound_sp, glm::value_ptr(it_model));
                     set_transform(bound_sp, glm::value_ptr(transform));
 
-                    gfx::draw{ bound_sp, bound_va, bound_texs }.elements(eb->b);
+                    gfx::draw draw{ bound_sp, bound_va, bound_texs };
+                    vertex_draw(draw);
                 }
             };
         } },
@@ -372,7 +371,7 @@ constexpr std::array cube_vertices{
 };
 #pragma GCC diagnostic pop
 
-constexpr std::array indices{
+constexpr std::array cube_indices{
     0u,  1u,  3u,  1u,  2u,  3u, // Front face
     4u,  5u,  7u,  5u,  6u,  7u, // Right face
     8u,  9u,  11u, 9u,  10u, 11u, // Back face
@@ -546,10 +545,10 @@ int main(int argc, char** argv) {
 
     const auto [light_shader_id, _1] = layer.storage.string.emplace("shader.light"_hsv);
     ASSERT(_1);
-    const auto object_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
+    const auto object_buffers = create_buffers(std::span{ cube_vertices }, std::span{ cube_indices });
 
     const auto source_shader = create_source_shader(root);
-    const auto source_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
+    const auto source_buffers = create_buffers(std::span{ cube_vertices }, std::span{ cube_indices });
 
     // TODO;
     // material material{

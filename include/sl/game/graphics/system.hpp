@@ -61,18 +61,18 @@ void graphics_system(const bound_render& bound_render, Layer& layer) {
         }
 
         for (const auto& vertex_id : vertex_ids) {
-            const auto maybe_vertex_component = layer.storage.vertex.lookup(vertex_id);
+            auto maybe_vertex_component = layer.storage.vertex.lookup(vertex_id);
             const auto ve_it = ve_map.find(vertex_id);
             if (const bool ve_found = ve_it != ve_map.end();
                 !ASSUME_VAL(maybe_vertex_component.has_value()) || !ASSUME_VAL(ve_found)) {
                 continue;
             }
 
-            const auto& vertex_component = maybe_vertex_component.value();
+            auto& vertex_component = maybe_vertex_component.value();
             const auto& vertex_entities = ve_it.value();
 
             const auto bound_va = vertex_component->va.bind();
-            draw(bound_va, std::span{ vertex_entities });
+            draw(bound_va, vertex_component->draw, std::span{ vertex_entities });
         }
     }
 }

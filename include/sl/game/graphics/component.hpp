@@ -42,6 +42,10 @@ struct vertex_component {
     };
 
     gfx::vertex_array va;
+
+    // closure for vb/eb
+    using draw_type = component_callback<void(gfx::draw&)>;
+    draw_type draw;
 };
 
 template <typename T, gfx::buffer_type type, gfx::buffer_usage usage>
@@ -60,8 +64,9 @@ struct shader_component {
 
     gfx::shader_program sp;
 
-    using draw = component_callback<void(const gfx::bound_vertex_array&, std::span<const entt::entity>)>;
-    component_callback<draw(const bound_render&, const gfx::bound_shader_program&, Layer&)> setup;
+    using draw_type = component_callback<
+        void(const gfx::bound_vertex_array&, vertex_component::draw_type&, std::span<const entt::entity>)>;
+    component_callback<draw_type(const bound_render&, const gfx::bound_shader_program&, Layer&)> setup;
 };
 
 struct transform_component {
