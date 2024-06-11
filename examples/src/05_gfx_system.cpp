@@ -173,9 +173,11 @@ gfx::texture create_texture(const std::filesystem::path& image_path) {
     return std::move(tex_builder).submit();
 }
 
+struct layer;
+
 struct layer_storage {
     meta::unique_string_storage string;
-    storage<shader_component> shader;
+    storage<shader_component<layer>> shader;
     storage<element_buffer_component> element_buffer;
     storage<vertex_component> vertex;
     storage<texture_component> texture;
@@ -186,7 +188,7 @@ struct layer {
     entt::registry registry;
 };
 
-shader_component create_object_shader_component(const std::filesystem::path& root, layer_storage& storage) {
+shader_component<layer> create_object_shader_component(const std::filesystem::path& root) {
     const std::array<gfx::shader, 2> shaders{
         *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::vertex, root / "shaders/05_gfx_system_obj.vert")),
         *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::fragment, root / "shaders/05_gfx_system_obj.frag")),
@@ -211,10 +213,9 @@ shader_component create_object_shader_component(const std::filesystem::path& roo
     auto pl_buffer = init_ssbo<point_light_buffer_element>(16);
     auto sl_buffer = init_ssbo<spot_light_buffer_element>(16);
 
-    return shader_component{
+    return shader_component<layer>{
         .sp{ std::move(sp) },
         .setup{ [ //
-                    &storage,
                     set_view_pos = std::move(set_view_pos),
                     dl_buffer = std::move(dl_buffer),
                     set_dl_size = std::move(set_directional_light_size),
@@ -226,31 +227,32 @@ shader_component create_object_shader_component(const std::filesystem::path& roo
                     set_model = std::move(set_model),
                     set_it_model = std::move(set_it_model),
                     set_transform = std::move(set_transform)](
-                    const game::bound_render& bound_render,
+                    const game::bound_render& bound_render, //
                     const gfx::bound_shader_program& bound_sp,
-                    entt::registry& registry
+                    layer& layer
                 ) mutable {
             const auto& view_position = bound_render.camera.tf.tr;
             set_view_pos(bound_sp, view_position.x, view_position.y, view_position.z);
 
             const std::uint32_t dl_size = set_ssbo_data(
-                bound_render, registry.view<transform_component, directional_light_component>(), dl_buffer
+                bound_render, layer.registry.view<transform_component, directional_light_component>(), dl_buffer
             );
             set_dl_size(bound_sp, dl_size);
 
-            const std::uint32_t pl_size =
-                set_ssbo_data(bound_render, registry.view<transform_component, point_light_component>(), pl_buffer);
+            const std::uint32_t pl_size = set_ssbo_data(
+                bound_render, layer.registry.view<transform_component, point_light_component>(), pl_buffer
+            );
             set_pl_size(bound_sp, pl_size);
 
-            const std::uint32_t sl_size =
-                set_ssbo_data(bound_render, registry.view<transform_component, spot_light_component>(), sl_buffer);
+            const std::uint32_t sl_size = set_ssbo_data(
+                bound_render, layer.registry.view<transform_component, spot_light_component>(), sl_buffer
+            );
             set_sl_size(bound_sp, sl_size);
 
             return [ //
-                       &storage,
                        &bound_render,
                        &bound_sp,
-                       &registry,
+                       &layer,
                        &set_material_shininess,
                        &set_model,
                        &set_it_model,
@@ -262,20 +264,20 @@ shader_component create_object_shader_component(const std::filesystem::path& roo
                        std::span<const entt::entity> entities
                    ) {
                 for (const entt::entity entity : entities) {
-                    auto mtl = *ASSERT_VAL(registry.try_get<material_component>(entity));
+                    auto mtl = *ASSERT_VAL(layer.registry.try_get<material_component>(entity));
                     std::array texs{
-                        *ASSERT_VAL(storage.texture.lookup(mtl.diffuse.id)),
-                        *ASSERT_VAL(storage.texture.lookup(mtl.specular.id)),
+                        *ASSERT_VAL(layer.storage.texture.lookup(mtl.diffuse.id)),
+                        *ASSERT_VAL(layer.storage.texture.lookup(mtl.specular.id)),
                     };
                     set_material_shininess(bound_sp, mtl.shininess);
                     const auto bound_texs = gfx::activate_textures(
                         texs | ranges::views::transform([](const auto& x) -> const gfx::texture& { return x->tex; })
                     );
 
-                    auto eb_id = *ASSERT_VAL(registry.try_get<element_buffer_component::id>(entity));
-                    auto eb = *ASSERT_VAL(storage.element_buffer.lookup(eb_id.id));
+                    auto eb_id = *ASSERT_VAL(layer.registry.try_get<element_buffer_component::id>(entity));
+                    auto eb = *ASSERT_VAL(layer.storage.element_buffer.lookup(eb_id.id));
 
-                    auto tf = *ASSERT_VAL(registry.try_get<transform_component>(entity));
+                    auto tf = *ASSERT_VAL(layer.registry.try_get<transform_component>(entity));
                     const auto make_model = sl::meta::pipeline{} //
                                                 .then([&tr = tf.tf.tr](auto x) { return glm::translate(x, tr); })
                                                 .then([rot = glm::toMat4(tf.tf.rot)](auto x) { return rot * x; });
@@ -534,9 +536,7 @@ int main(int argc, char** argv) {
     ASSERT(_0);
 
     (void) //
-        layer.storage.shader.emplace(object_shader_id, [&root, &layer] {
-            return game::create_object_shader_component(root, layer.storage);
-        });
+        layer.storage.shader.emplace(object_shader_id, [&root] { return game::create_object_shader_component(root); });
 
     // constexpr std::array<std::string_view, 2> material_textures{
     //     "u_material.diffuse",
@@ -667,7 +667,7 @@ int main(int argc, char** argv) {
 
         // render
         auto bound_render = render.bind(graphics.current_window, *graphics.state);
-        game::graphics_system(bound_render, layer.storage.shader, layer.storage.vertex, layer.registry);
+        game::graphics_system(bound_render, layer);
 
         // source
         {

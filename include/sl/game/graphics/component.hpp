@@ -52,6 +52,7 @@ struct buffer_component {
     gfx::buffer<T, type, usage> b;
 };
 
+template <typename Layer>
 struct shader_component {
     struct id {
         meta::unique_string id;
@@ -60,7 +61,7 @@ struct shader_component {
     gfx::shader_program sp;
 
     using draw = component_callback<void(const gfx::bound_vertex_array&, std::span<const entt::entity>)>;
-    component_callback<draw(const bound_render&, const gfx::bound_shader_program&, entt::registry&)> setup;
+    component_callback<draw(const bound_render&, const gfx::bound_shader_program&, Layer&)> setup;
 };
 
 struct transform_component {
