@@ -27,23 +27,24 @@ concept GfxLayerRequirements = requires(Layer& layer) {
 // might come with other more subtle performance costs.
 template <GfxLayerRequirements Layer>
 void graphics_system(const bound_render& bound_render, Layer& layer) {
-    using sv_map_t = tsl::robin_map<
-        /* shader */ meta::unique_string,
-        /* vertices */ std::vector<meta::unique_string>>;
     using ve_map_t = tsl::robin_map<
         /* vertex */ meta::unique_string,
         /* entity */ std::vector<entt::entity>>;
+    using sv_map_t = tsl::robin_map<
+        /* shader */ meta::unique_string,
+        /* vertices */ ve_map_t>;
 
-    sv_map_t sv_map;
-    ve_map_t ve_map;
+    const sv_map_t sv_map = [&layer] {
+        sv_map_t sv_map;
+        const auto entities =
+            layer.registry.template view<typename shader_component<Layer>::id, vertex_component::id>();
+        for (const auto& [entity, shader, vertex] : entities.each()) {
+            sv_map[shader.id][vertex.id].push_back(entity);
+        }
+        return sv_map;
+    }();
 
-    const auto entities = layer.registry.template view<typename shader_component<Layer>::id, vertex_component::id>();
-    for (const auto& [entity, shader, vertex] : entities.each()) {
-        sv_map[shader.id].push_back(vertex.id);
-        ve_map[vertex.id].push_back(entity);
-    }
-
-    for (const auto& [shader_id, vertex_ids] : sv_map) {
+    for (const auto& [shader_id, ve_map] : sv_map) {
         auto maybe_shader_component = layer.storage.shader.lookup(shader_id);
         if (!ASSUME_VAL(maybe_shader_component.has_value())) {
             continue;
@@ -60,19 +61,19 @@ void graphics_system(const bound_render& bound_render, Layer& layer) {
             continue;
         }
 
-        for (const auto& vertex_id : vertex_ids) {
+        for (const auto& [vertex_id, entities] : ve_map) {
             auto maybe_vertex_component = layer.storage.vertex.lookup(vertex_id);
-            const auto ve_it = ve_map.find(vertex_id);
-            if (const bool ve_found = ve_it != ve_map.end();
-                !ASSUME_VAL(maybe_vertex_component.has_value()) || !ASSUME_VAL(ve_found)) {
+            if (!ASSUME_VAL(maybe_vertex_component.has_value())) {
                 continue;
             }
 
             auto& vertex_component = maybe_vertex_component.value();
-            const auto& vertex_entities = ve_it.value();
+            if (!ASSUME_VAL(vertex_component->draw)) {
+                continue;
+            }
 
             const auto bound_va = vertex_component->va.bind();
-            draw(bound_va, vertex_component->draw, std::span{ vertex_entities });
+            draw(bound_va, vertex_component->draw, std::span{ entities });
         }
     }
 }
