@@ -30,5 +30,4 @@ struct graphics {
     static tl::optional<graphics> initialize(std::string_view title, glm::ivec2 size, glm::fvec4 clear_color);
 };
 
-
 } // namespace sl::game

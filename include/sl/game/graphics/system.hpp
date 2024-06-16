@@ -6,7 +6,7 @@
 
 #include "sl/game/graphics/component.hpp"
 #include "sl/game/graphics/render.hpp"
-#include "sl/game/storage.hpp"
+#include "sl/game/layer.hpp"
 
 #include <entt/entt.hpp>
 #include <libassert/assert.hpp>
@@ -15,8 +15,7 @@
 namespace sl::game {
 
 template <typename Layer>
-concept GfxLayerRequirements = requires(Layer& layer) {
-    { layer.registry } -> std::same_as<entt::registry&>;
+concept GfxLayerRequirements = GameLayerRequirements<Layer> && requires(Layer& layer) {
     { layer.storage.shader } -> std::same_as<storage<shader_component<Layer>>&>;
     { layer.storage.vertex } -> std::same_as<storage<vertex_component>&>;
 };

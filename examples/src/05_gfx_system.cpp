@@ -270,7 +270,6 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                        std::span<const entt::entity> entities
                    ) {
                 for (const entt::entity entity : entities) {
-                    spdlog::debug("object shader: {}", static_cast<std::uint32_t>(entity));
                     if (const bool has_components =
                             layer.registry.all_of<transform_component, material_component::id>(entity);
                         !ASSUME_VAL(has_components)) {
@@ -512,25 +511,6 @@ static const game::spot_light_component player_spot_light_component{
     .outer_cutoff = glm::cos(glm::radians(15.0f)),
 };
 
-struct keys_input_state {
-    sl::meta::dirty<bool> esc{ false };
-    sl::meta::dirty<bool> q{ false };
-    sl::meta::dirty<bool> w{ false };
-    sl::meta::dirty<bool> e{ false };
-    sl::meta::dirty<bool> a{ false };
-    sl::meta::dirty<bool> s{ false };
-    sl::meta::dirty<bool> d{ false };
-};
-
-struct mouse_input_state {
-    sl::meta::dirty<bool> right{ false };
-};
-
-struct cursor_input_state {
-    sl::meta::dirty<glm::dvec2> last;
-    sl::meta::dirty<glm::dvec2> curr;
-};
-
 int main(int argc, char** argv) {
     spdlog::set_level(spdlog::level::debug);
 
@@ -540,91 +520,7 @@ int main(int argc, char** argv) {
     game::graphics graphics =
         *ASSERT_VAL(game::graphics::initialize("05_gfx_system", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
-    keys_input_state kis;
-    (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
-        const bool is_pressed = action == GLFW_PRESS || action == GLFW_REPEAT;
-        switch (key) {
-        case GLFW_KEY_ESCAPE:
-            kis.esc.set(is_pressed);
-            break;
-        case GLFW_KEY_Q:
-            kis.q.set(is_pressed);
-            break;
-        case GLFW_KEY_W:
-            kis.w.set(is_pressed);
-            break;
-        case GLFW_KEY_E:
-            kis.e.set(is_pressed);
-            break;
-        case GLFW_KEY_A:
-            kis.a.set(is_pressed);
-            break;
-        case GLFW_KEY_S:
-            kis.s.set(is_pressed);
-            break;
-        case GLFW_KEY_D:
-            kis.d.set(is_pressed);
-            break;
-        }
-    });
-
-    mouse_input_state mis;
-    (void)graphics.window->mouse_button_cb.connect([&mis](int button, int action, int mods [[maybe_unused]]) {
-        if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-            mis.right.set(action == GLFW_PRESS || action == GLFW_REPEAT);
-        }
-    });
-
-    cursor_input_state cis;
-    (void)graphics.window->cursor_pos_cb.connect([&cis](glm::dvec2 cursor_pos) { cis.curr.set(cursor_pos); });
-
-    constexpr auto calculate_tr = [](const keys_input_state& kis) {
-        constexpr auto sub = [](bool a, bool b) {
-            return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
-        };
-        constexpr gfx::basis local;
-        return sub(kis.e.get(), kis.q.get()) * local.up() + //
-               sub(kis.d.get(), kis.a.get()) * local.right() + //
-               sub(kis.w.get(), kis.s.get()) * local.forward();
-    };
-    constexpr auto calculate_cursor_offset = [](const mouse_input_state& mis,
-                                                cursor_input_state& cis) -> tl::optional<glm::dvec2> {
-        if (!mis.right.get()) {
-            cis.curr.then([&cis](glm::dvec2 curr) { cis.last.set(curr); });
-            return tl::nullopt;
-        }
-        return cis.curr
-            .then([&cis](const glm::dvec2& curr) {
-                auto offset = cis.last.then([&curr](const glm::dvec2& last) { return curr - last; });
-                cis.last.set(curr);
-                return offset;
-            })
-            .value_or(tl::nullopt);
-    };
-
-    constexpr auto camera_update = [](gfx::camera& camera,
-                                      std::chrono::duration<float> delta_time,
-                                      const glm::vec3& tr,
-                                      const tl::optional<glm::dvec2>& maybe_cursor_offset) {
-        maybe_cursor_offset.map([&camera](const glm::dvec2& cursor_offset) {
-            constexpr float sensitivity = -glm::radians(0.1f);
-            const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
-            const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
-
-            constexpr gfx::basis local;
-            const glm::quat rot_yaw = glm::angleAxis(yaw, local.y);
-            camera.tf.rotate(rot_yaw);
-
-            const glm::vec3 camera_forward = camera.tf.rot * local.forward();
-            const glm::vec3 camera_right = glm::cross(camera_forward, local.up());
-            const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
-            camera.tf.rotate(rot_pitch);
-        });
-
-        constexpr float camera_acc = 2.5f;
-        const float camera_speed = camera_acc * delta_time.count();
-        camera.tf.translate(camera_speed * (camera.tf.rot * tr));
-    };
+    game::input_system input_system{ *graphics.window };
 
     // prepare render
     game::render render{
@@ -705,7 +601,6 @@ int main(int argc, char** argv) {
                     .rot = glm::angleAxis(glm::radians(angle), render.world.up()),
                 } }
             );
-            spdlog::debug("object: {}", static_cast<std::uint32_t>(entity));
             return entity;
         })
         | ranges::to<std::vector>();
@@ -723,7 +618,6 @@ int main(int argc, char** argv) {
             layer.registry.emplace<game::transform_component>(
                 entity, game::transform_component{ .tf{ .tr = p, .rot{} } }
             );
-            spdlog::debug("light: {}", static_cast<std::uint32_t>(entity));
             return entity;
         })
         | ranges::to<std::vector>();
@@ -738,7 +632,19 @@ int main(int argc, char** argv) {
         layer.registry.emplace<game::transform_component>(
             entity, game::transform_component{ .tf{ .tr{}, .rot{ rot } } }
         );
-        spdlog::debug("global: {}", static_cast<std::uint32_t>(entity));
+        layer.registry.emplace<game::input_component<game::layer>>(
+            entity,
+            [](const game::render&,
+               gfx::current_window& cw,
+               game::layer&,
+               entt::entity,
+               game::input_state& input,
+               const rt::time_point&) {
+                input.keyboard.pressed.at(GLFW_KEY_ESCAPE).then([&cw](bool esc_pressed) {
+                    cw.set_should_close(esc_pressed);
+                });
+            }
+        );
         return entity;
     }();
     const sl::meta::defer destroy_global_entity{ [&] { layer.registry.destroy(global_entity); } };
@@ -747,8 +653,64 @@ int main(int argc, char** argv) {
         const entt::entity entity = layer.registry.create();
         layer.registry.emplace<game::spot_light_component>(entity, player_spot_light_component);
         layer.registry.emplace<game::transform_component>(entity, render.camera.tf);
-        spdlog::debug("player: {}", static_cast<std::uint32_t>(entity));
-        // TODO: controls, camera_component???
+        layer.registry.emplace<game::input_component<game::layer>>(
+            entity,
+            [](const game::render& render,
+               gfx::current_window& cw,
+               game::layer& layer,
+               entt::entity entity,
+               game::input_state& input,
+               const rt::time_point& time_point) {
+                constexpr auto calculate_tr = [](const gfx::basis& world, const game::keyboard_input_state& keyboard) {
+                    constexpr auto sub = [](bool a, bool b) {
+                        return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
+                    };
+                    const auto& q = keyboard.pressed.at(GLFW_KEY_Q);
+                    const auto& w = keyboard.pressed.at(GLFW_KEY_W);
+                    const auto& e = keyboard.pressed.at(GLFW_KEY_E);
+                    const auto& a = keyboard.pressed.at(GLFW_KEY_A);
+                    const auto& s = keyboard.pressed.at(GLFW_KEY_S);
+                    const auto& d = keyboard.pressed.at(GLFW_KEY_D);
+                    return sub(e.get(), q.get()) * world.up() + //
+                           sub(d.get(), a.get()) * world.right() + //
+                           sub(w.get(), s.get()) * world.forward();
+                };
+
+                if (const bool has_components = layer.registry.all_of<game::transform_component>(entity);
+                    !ASSUME_VAL(has_components)) {
+                    return;
+                }
+
+                auto& rmb_pressed = input.mouse.pressed.at(GLFW_MOUSE_BUTTON_RIGHT);
+                rmb_pressed.then([&cw](bool cursor_hidden) {
+                    cw.set_input_mode(GLFW_CURSOR, cursor_hidden ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+                });
+
+                auto& tf = layer.registry.get<game::transform_component>(entity).tf;
+                if (rmb_pressed.get()) {
+                    input.cursor.offset().map([&world = render.world, &tf](const glm::dvec2& cursor_offset) {
+                        constexpr float sensitivity = -glm::radians(0.1f);
+                        const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
+                        const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
+
+                        const glm::quat rot_yaw = glm::angleAxis(yaw, world.y);
+                        tf.rotate(rot_yaw);
+
+                        const glm::vec3 camera_forward = tf.rot * world.forward();
+                        const glm::vec3 camera_right = glm::cross(camera_forward, world.up());
+                        const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
+                        tf.rotate(rot_pitch);
+                    });
+                }
+                {
+                    constexpr float acc = 2.5f;
+                    const float speed = acc * time_point.delta_sec().count();
+                    const auto tr = calculate_tr(render.world, input.keyboard);
+                    tf.translate(speed * (tf.rot * tr));
+                }
+            }
+        );
+        // TODO:  camera_component???
         return entity;
     }();
     const sl::meta::defer destroy_player_entity{ [&] { layer.registry.destroy(player_entity); } };
@@ -758,26 +720,18 @@ int main(int argc, char** argv) {
     while (!graphics.current_window.should_close()) {
         // input
         graphics.context->poll_events();
-
-        // process input
         graphics.state->frame_buffer_size.then([&cw = graphics.current_window](glm::ivec2 frame_buffer_size) {
             cw.viewport(glm::ivec2{}, frame_buffer_size);
         });
         graphics.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
             ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
         });
-        kis.esc.then([&cw = graphics.current_window](bool esc) { cw.set_should_close(esc); });
-        mis.right.then([&cw = graphics.current_window](bool right) {
-            cw.set_input_mode(GLFW_CURSOR, right ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-        });
 
         // update
         const rt::time_point time_point = time.calculate();
-        const auto tr = calculate_tr(kis);
-        const auto maybe_cursor_offset = calculate_cursor_offset(mis, cis);
-        camera_update(render.camera, time_point.delta_sec(), tr, maybe_cursor_offset);
+        input_system(render, graphics.current_window, layer, time_point);
 
-        layer.registry.get<game::transform_component>(player_entity).tf = render.camera.tf;
+        render.camera.tf = layer.registry.get<game::transform_component>(player_entity).tf;
 
         // render
         auto bound_render = render.bind(graphics.current_window, *graphics.state);
@@ -794,7 +748,8 @@ int main(int argc, char** argv) {
             // ImGui::ColorEdit3("directional_light specular", glm::value_ptr(directional_light.specular));
             //
             // ImGui::Spacing();
-            // ImGui::SliderFloat("shininess", &material.shininess, 2.0f, 256, "%.0f", ImGuiSliderFlags_Logarithmic);
+            // ImGui::SliderFloat("shininess", &material.shininess, 2.0f, 256, "%.0f",
+            // ImGuiSliderFlags_Logarithmic);
         }
     }
 

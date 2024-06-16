@@ -10,6 +10,8 @@
 #include <sl/meta/lifetime/finalizer.hpp>
 #include <sl/meta/lifetime/unique.hpp>
 
+#include <function2/function2.hpp>
+
 namespace sl::game {
 
 class bound_render;

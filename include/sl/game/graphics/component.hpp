@@ -4,29 +4,23 @@
 
 #pragma once
 
+#include "sl/game/layer.hpp"
 #include "sl/game/graphics/render.hpp"
 
 #include <sl/gfx/primitives.hpp>
+#include <sl/gfx/render/draw.hpp>
 #include <sl/gfx/shader/program.hpp>
 #include <sl/gfx/vtx/texture.hpp>
 #include <sl/gfx/vtx/vertex_array.hpp>
+
 #include <sl/meta/storage/persistent.hpp>
 #include <sl/meta/storage/unique_string.hpp>
+
 #include <sl/rt/time.hpp>
 
 #include <entt/entt.hpp>
-#include <function2/function2.hpp>
 
 namespace sl::game {
-
-template <typename Signature, typename Capacity = fu2::capacity_default>
-using component_callback = fu2::function_base<
-    /*IsOwning=*/true,
-    /*IsCopyable=*/false,
-    /*Capacity=*/Capacity,
-    /*IsThrowing=*/false,
-    /*HasStrongExceptGuarantee=*/true,
-    /*Signatures=*/Signature>;
 
 struct texture_component {
     struct id {
