@@ -24,6 +24,7 @@ struct graphics_state {
     meta::dirty<glm::fvec2> window_content_scale;
 };
 
+// TODO: move into gfx
 class graphics_frame : public meta::finalizer<graphics_frame> {
 public:
     explicit graphics_frame(gfx::current_window& current_window);

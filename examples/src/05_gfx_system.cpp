@@ -736,17 +736,24 @@ int main(int argc, char** argv) {
 
         // overlay
         auto imgui_frame = gfx.imgui.new_frame(); // TODO: require gfx_frame here too
-        if (const auto imgui_window = imgui_frame.begin("light")) {
-            // ImGui::SliderFloat3(
-            //     "directional_light position", glm::value_ptr(directional_light.direction), -10.0f, 10.0f
-            // );
-            // ImGui::ColorEdit3("directional_light ambient", glm::value_ptr(directional_light.ambient));
-            // ImGui::ColorEdit3("directional_light diffuse", glm::value_ptr(directional_light.diffuse));
-            // ImGui::ColorEdit3("directional_light specular", glm::value_ptr(directional_light.specular));
-            //
-            // ImGui::Spacing();
-            // ImGui::SliderFloat("shininess", &material.shininess, 2.0f, 256, "%.0f",
-            // ImGuiSliderFlags_Logarithmic);
+        if (const auto imgui_window = imgui_frame.begin("debug")) {
+            // TODO: maybe use actual angles against the world basis
+            auto& directional_light_rot = layer.registry.get<game::transform_component>(global_entity).tf.rot;
+            ImGui::SliderFloat4("directional_light rot", glm::value_ptr(directional_light_rot), -1.0f, 1.0f);
+            directional_light_rot = glm::normalize(directional_light_rot);
+
+            auto& directional_light = layer.registry.get<game::directional_light_component>(global_entity);
+            ImGui::ColorEdit3("directional_light ambient", glm::value_ptr(directional_light.ambient));
+            ImGui::ColorEdit3("directional_light diffuse", glm::value_ptr(directional_light.diffuse));
+            ImGui::ColorEdit3("directional_light specular", glm::value_ptr(directional_light.specular));
+
+            ImGui::Spacing();
+            layer.storage.material.lookup(cube_material_id)
+                .map([](sl::meta::persistent<game::material_component> material) {
+                    ImGui::SliderFloat(
+                        "shininess", &material->shininess, 2.0f, 256, "%.0f", ImGuiSliderFlags_Logarithmic
+                    );
+                });
         }
     }
 
