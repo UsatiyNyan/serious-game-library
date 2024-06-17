@@ -43,4 +43,13 @@ tl::optional<graphics> graphics::initialize(std::string_view title, glm::ivec2 s
     };
 }
 
+graphics_frame::graphics_frame(gfx::current_window& current_window) : current_window_{ current_window } {
+    current_window_.enable(GL_DEPTH_TEST);
+}
+
+meta::defer<fu2::capacity_default> graphics_frame::begin() {
+    current_window_.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    return meta::defer<fu2::capacity_default>{ [&cw = current_window_] { cw.swap_buffers(); } };
+}
+
 } // namespace sl::game

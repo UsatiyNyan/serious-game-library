@@ -134,7 +134,7 @@ auto init_ssbo(std::size_t size) {
 
 template <typename ComponentView, typename T>
 std::uint32_t set_ssbo_data(
-    const bound_render& bound_render,
+    const gfx::basis& world,
     ComponentView component_view,
     gfx::buffer<T, gfx::buffer_type::shader_storage, gfx::buffer_usage::dynamic_draw>& ssbo
 ) {
@@ -148,7 +148,7 @@ std::uint32_t set_ssbo_data(
             spdlog::warn("exceeded limit of components: {}", mapped_ssbo_data.size());
             break;
         }
-        mapped_ssbo_data[size_counter] = T::from_component(bound_render.world, tf, elem);
+        mapped_ssbo_data[size_counter] = T::from_component(world, tf, elem);
         ++size_counter;
     }
     return size_counter;
@@ -232,25 +232,24 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                     set_model = std::move(set_model),
                     set_it_model = std::move(set_it_model),
                     set_transform = std::move(set_transform)](
-                    const game::bound_render& bound_render, //
+                    const game::camera_state& camera_state, //
                     const gfx::bound_shader_program& bound_sp,
                     layer& layer
                 ) mutable {
-            const auto& view_position = bound_render.camera.tf.tr;
-            set_view_pos(bound_sp, view_position.x, view_position.y, view_position.z);
+            set_view_pos(bound_sp, camera_state.position.x, camera_state.position.y, camera_state.position.z);
 
             const std::uint32_t dl_size = set_ssbo_data(
-                bound_render, layer.registry.view<transform_component, directional_light_component>(), dl_buffer
+                camera_state.world, layer.registry.view<transform_component, directional_light_component>(), dl_buffer
             );
             set_dl_size(bound_sp, dl_size);
 
             const std::uint32_t pl_size = set_ssbo_data(
-                bound_render, layer.registry.view<transform_component, point_light_component>(), pl_buffer
+                camera_state.world, layer.registry.view<transform_component, point_light_component>(), pl_buffer
             );
             set_pl_size(bound_sp, pl_size);
 
             const std::uint32_t sl_size = set_ssbo_data(
-                bound_render, layer.registry.view<transform_component, spot_light_component>(), sl_buffer
+                camera_state.world, layer.registry.view<transform_component, spot_light_component>(), sl_buffer
             );
             set_sl_size(bound_sp, sl_size);
 
@@ -259,7 +258,7 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                        &set_model,
                        &set_it_model,
                        &set_transform,
-                       &bound_render,
+                       &camera_state,
                        &bound_sp,
                        &layer,
                        bound_dl_base = dl_buffer.bind_base(0),
@@ -285,7 +284,7 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                                                        .then(SL_META_LIFT(glm::transpose));
                     const glm::mat4 model = make_model(glm::mat4(1.0f));
                     const glm::mat3 it_model = make_it_model(model);
-                    const glm::mat4 transform = bound_render.projection * bound_render.view * model;
+                    const glm::mat4 transform = camera_state.projection * camera_state.view * model;
                     set_model(bound_sp, glm::value_ptr(model));
                     set_it_model(bound_sp, glm::value_ptr(it_model));
                     set_transform(bound_sp, glm::value_ptr(transform));
@@ -321,14 +320,14 @@ shader_component<layer> create_source_shader_component(const std::filesystem::pa
             [ //
                 set_transform = std::move(set_transform),
                 set_light_color = std::move(set_light_color)]( //
-                const game::bound_render& bound_render,
+                const game::camera_state& camera_state,
                 const gfx::bound_shader_program& bound_sp,
                 layer& layer
             ) {
                 return [ //
                            &set_transform,
                            &set_light_color,
-                           &bound_render,
+                           &camera_state,
                            &bound_sp,
                            &layer]( //
                            const gfx::bound_vertex_array& bound_va,
@@ -343,7 +342,7 @@ shader_component<layer> create_source_shader_component(const std::filesystem::pa
                         }
 
                         const auto& tf_component = layer.registry.get<transform_component>(entity);
-                        const glm::mat4 transform = bound_render.projection * bound_render.view
+                        const glm::mat4 transform = camera_state.projection * camera_state.view
                                                     * glm::translate(glm::mat4(1.0f), tf_component.tf.tr);
                         set_transform(bound_sp, glm::value_ptr(transform));
 
@@ -517,24 +516,12 @@ int main(int argc, char** argv) {
     const rt::context rt_ctx{ argc, argv };
     const auto root = rt_ctx.path().parent_path();
 
-    game::graphics graphics =
+    game::graphics gfx =
         *ASSERT_VAL(game::graphics::initialize("05_gfx_system", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+    game::graphics_frame gfx_frame{ gfx.current_window };
+    game::graphics_system gfx_system;
 
-    game::input_system input_system{ *graphics.window };
-
-    // prepare render
-    game::render render{
-        graphics,
-        gfx::perspective_projection{
-            .fov = glm::radians(45.0f),
-            .near = 0.1f,
-            .far = 100.0f,
-        },
-    };
-    render.camera.tf = gfx::transform{
-        .tr = glm::vec3{ 0.0f, 0.0f, 3.0f },
-        .rot = glm::angleAxis(glm::radians(-180.0f), render.world.up()),
-    };
+    game::input_system input_system{ *gfx.window };
 
     game::layer layer{
         .storage{
@@ -598,7 +585,7 @@ int main(int argc, char** argv) {
                 entity,
                 game::transform_component{ .tf{
                     .tr = p,
-                    .rot = glm::angleAxis(glm::radians(angle), render.world.up()),
+                    .rot = glm::angleAxis(glm::radians(angle), gfx_system.world.up()),
                 } }
             );
             return entity;
@@ -628,13 +615,13 @@ int main(int argc, char** argv) {
     const entt::entity global_entity = [&] {
         const entt::entity entity = layer.registry.create();
         layer.registry.emplace<game::directional_light_component>(entity, global_directional_light_component);
-        auto rot = glm::rotation(render.world.forward(), glm::normalize(glm::vec3{ -0.2f, -1.0f, -0.3f }));
+        auto rot = glm::rotation(gfx_system.world.forward(), glm::normalize(glm::vec3{ -0.2f, -1.0f, -0.3f }));
         layer.registry.emplace<game::transform_component>(
             entity, game::transform_component{ .tf{ .tr{}, .rot{ rot } } }
         );
         layer.registry.emplace<game::input_component<game::layer>>(
             entity,
-            [](const game::render&,
+            [](const gfx::basis&,
                gfx::current_window& cw,
                game::layer&,
                entt::entity,
@@ -652,10 +639,24 @@ int main(int argc, char** argv) {
     const entt::entity player_entity = [&] {
         const entt::entity entity = layer.registry.create();
         layer.registry.emplace<game::spot_light_component>(entity, player_spot_light_component);
-        layer.registry.emplace<game::transform_component>(entity, render.camera.tf);
+        layer.registry.emplace<game::transform_component>(
+            entity,
+            gfx::transform{
+                .tr = glm::vec3{ 0.0f, 0.0f, 3.0f },
+                .rot = glm::angleAxis(glm::radians(-180.0f), gfx_system.world.up()),
+            }
+        );
+        layer.registry.emplace<game::camera_component>(
+            entity,
+            gfx::perspective_projection{
+                .fov = glm::radians(45.0f),
+                .near = 0.1f,
+                .far = 100.0f,
+            }
+        );
         layer.registry.emplace<game::input_component<game::layer>>(
             entity,
-            [](const game::render& render,
+            [](const gfx::basis& world,
                gfx::current_window& cw,
                game::layer& layer,
                entt::entity entity,
@@ -688,8 +689,8 @@ int main(int argc, char** argv) {
 
                 auto& tf = layer.registry.get<game::transform_component>(entity).tf;
                 if (rmb_pressed.get()) {
-                    input.cursor.offset().map([&world = render.world, &tf](const glm::dvec2& cursor_offset) {
-                        constexpr float sensitivity = -glm::radians(0.1f);
+                    input.cursor.offset().map([&world, &tf](const glm::dvec2& cursor_offset) {
+                        constexpr float sensitivity = -glm::radians(0.2f);
                         const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
                         const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
 
@@ -703,42 +704,38 @@ int main(int argc, char** argv) {
                     });
                 }
                 {
-                    constexpr float acc = 2.5f;
+                    constexpr float acc = 5.0f;
                     const float speed = acc * time_point.delta_sec().count();
-                    const auto tr = calculate_tr(render.world, input.keyboard);
+                    const auto tr = calculate_tr(world, input.keyboard);
                     tf.translate(speed * (tf.rot * tr));
                 }
             }
         );
-        // TODO:  camera_component???
         return entity;
     }();
     const sl::meta::defer destroy_player_entity{ [&] { layer.registry.destroy(player_entity); } };
 
     rt::time time;
 
-    while (!graphics.current_window.should_close()) {
+    while (!gfx.current_window.should_close()) {
         // input
-        graphics.context->poll_events();
-        graphics.state->frame_buffer_size.then([&cw = graphics.current_window](glm::ivec2 frame_buffer_size) {
+        gfx.context->poll_events();
+        gfx.state->frame_buffer_size.then([&cw = gfx.current_window](glm::ivec2 frame_buffer_size) {
             cw.viewport(glm::ivec2{}, frame_buffer_size);
         });
-        graphics.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
+        gfx.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
             ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
         });
 
         // update
         const rt::time_point time_point = time.calculate();
-        input_system(render, graphics.current_window, layer, time_point);
-
-        render.camera.tf = layer.registry.get<game::transform_component>(player_entity).tf;
+        input_system(gfx_system.world, gfx.current_window, layer, time_point);
 
         // render
-        auto bound_render = render.bind(graphics.current_window, *graphics.state);
-        game::graphics_system(bound_render, layer);
+        gfx_system(gfx_frame, *gfx.state, layer);
 
         // overlay
-        auto imgui_frame = graphics.imgui.new_frame();
+        auto imgui_frame = gfx.imgui.new_frame();
         if (const auto imgui_window = imgui_frame.begin("light")) {
             // ImGui::SliderFloat3(
             //     "directional_light position", glm::value_ptr(directional_light.direction), -10.0f, 10.0f

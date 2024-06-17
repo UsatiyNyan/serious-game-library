@@ -38,10 +38,15 @@ public:
     const auto& state() const { return state_; }
 
     template <InputLayerRequirements Layer>
-    void operator()(const render& render, gfx::current_window& window, Layer& layer, const rt::time_point& time_point) {
+    void operator()(
+        const gfx::basis& world,
+        gfx::current_window& window,
+        Layer& layer,
+        const rt::time_point& time_point
+    ) {
         auto entities = layer.registry.template view<input_component<Layer>>();
         for (auto&& [entity, input] : entities.each()) {
-            input.handler(render, window, layer, entity, state_, time_point);
+            input.handler(world, window, layer, entity, state_, time_point);
         }
     }
 

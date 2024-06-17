@@ -4,11 +4,12 @@
 
 #pragma once
 
+#include "sl/game/graphics/context.hpp"
 #include "sl/game/layer.hpp"
-#include "sl/game/graphics/render.hpp"
 
 #include <sl/gfx/primitives.hpp>
 #include <sl/gfx/render/draw.hpp>
+#include <sl/gfx/render/projection.hpp>
 #include <sl/gfx/shader/program.hpp>
 #include <sl/gfx/vtx/texture.hpp>
 #include <sl/gfx/vtx/vertex_array.hpp>
@@ -60,13 +61,17 @@ struct shader_component {
 
     using draw_type = component_callback<
         void(const gfx::bound_vertex_array&, vertex_component::draw_type&, std::span<const entt::entity>)>;
-    component_callback<draw_type(const bound_render&, const gfx::bound_shader_program&, Layer&)> setup;
+    component_callback<draw_type(const camera_state&, const gfx::bound_shader_program&, Layer&)> setup;
 };
 
 struct transform_component {
     gfx::transform tf;
 
     [[nodiscard]] glm::vec3 direction(const gfx::basis& world) const { return tf.rot * world.forward(); }
+};
+
+struct camera_component {
+    gfx::projection proj;
 };
 
 } // namespace sl::game
