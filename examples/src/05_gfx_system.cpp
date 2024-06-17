@@ -276,14 +276,11 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                     }
 
                     const auto& tf = layer.registry.get<transform_component>(entity);
-                    const auto make_model = meta::pipeline{} //
-                                                .then([&tr = tf.tf.tr](auto x) { return glm::translate(x, tr); })
-                                                .then([rot = glm::toMat4(tf.tf.rot)](auto x) { return rot * x; });
-                    constexpr auto make_it_model = meta::pipeline{} //
-                                                       .then(SL_META_LIFT(glm::inverse))
-                                                       .then(SL_META_LIFT(glm::transpose));
-                    const glm::mat4 model = make_model(glm::mat4(1.0f));
-                    const glm::mat3 it_model = make_it_model(model);
+                    const glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), tf.tf.tr);
+                    const glm::mat4 rotation_matrix = glm::mat4_cast(tf.tf.rot);
+                    // TODO: scale
+                    const glm::mat4 model = translation_matrix * rotation_matrix;
+                    const glm::mat3 it_model = glm::transpose(glm::inverse(model));
                     const glm::mat4 transform = camera_state.projection * camera_state.view * model;
                     set_model(bound_sp, glm::value_ptr(model));
                     set_it_model(bound_sp, glm::value_ptr(it_model));
@@ -434,28 +431,42 @@ constexpr std::array cube_indices{
 
 constexpr std::array cube_positions{
     glm::vec3{ 0.0f, 0.0f, 0.0f }, //
-    glm::vec3{ 2.0f, 5.0f, -15.0f }, //
-    glm::vec3{ -1.5f, -2.2f, -2.5f }, //
-    glm::vec3{ -3.8f, -2.0f, -12.3f }, //
-    glm::vec3{ 2.4f, -0.4f, -3.5f }, //
-    glm::vec3{ -1.7f, 3.0f, -7.5f }, //
-    glm::vec3{ 1.3f, -2.0f, -2.5f }, //
-    glm::vec3{ 1.5f, 2.0f, -2.5f }, //
-    glm::vec3{ 1.5f, 0.2f, -1.5f }, //
-    glm::vec3{ -1.3f, 1.0f, -1.5f }, //
+    glm::vec3{ 0.0f, 0.0f, 2.0f }, //
+    glm::vec3{ 0.0f, 0.0f, 4.0f }, //
+    glm::vec3{ 0.0f, 0.0f, 6.0f }, //
+    glm::vec3{ 0.0f, 0.0f, 8.0f }, //
+    glm::vec3{ 2.0f, 0.0f, 0.0f }, //
+    glm::vec3{ 2.0f, 0.0f, 2.0f }, //
+    glm::vec3{ 2.0f, 0.0f, 4.0f }, //
+    glm::vec3{ 2.0f, 0.0f, 6.0f }, //
+    glm::vec3{ 2.0f, 0.0f, 8.0f }, //
+    glm::vec3{ 4.0f, 0.0f, 0.0f }, //
+    glm::vec3{ 4.0f, 0.0f, 2.0f }, //
+    glm::vec3{ 4.0f, 0.0f, 4.0f }, //
+    glm::vec3{ 4.0f, 0.0f, 6.0f }, //
+    glm::vec3{ 4.0f, 0.0f, 8.0f }, //
+    glm::vec3{ 6.0f, 0.0f, 0.0f }, //
+    glm::vec3{ 6.0f, 0.0f, 2.0f }, //
+    glm::vec3{ 6.0f, 0.0f, 4.0f }, //
+    glm::vec3{ 6.0f, 0.0f, 6.0f }, //
+    glm::vec3{ 6.0f, 0.0f, 8.0f }, //
+    glm::vec3{ 8.0f, 0.0f, 0.0f }, //
+    glm::vec3{ 8.0f, 0.0f, 2.0f }, //
+    glm::vec3{ 8.0f, 0.0f, 4.0f }, //
+    glm::vec3{ 8.0f, 0.0f, 6.0f }, //
+    glm::vec3{ 8.0f, 0.0f, 8.0f }, //
 };
 
 constexpr std::array point_light_positions{
-    glm::vec3{ 0.7f, 0.2f, 2.0f },
-    glm::vec3{ 2.3f, -3.3f, -4.0f },
-    glm::vec3{ -4.0f, 2.0f, -12.0f },
-    glm::vec3{ 0.0f, 0.0f, -3.0f },
+    glm::vec3{ 10.0f, 0.0f, 0.0f },
+    glm::vec3{ 0.0f, 10.0f, 0.0f },
+    glm::vec3{ 0.0f, 0.0f, 10.0f },
 };
 
 constexpr std::array point_light_components{
     game::point_light_component{
-        .ambient{ 0.05f, 0.0f, 0.0f },
-        .diffuse{ 0.8f, 0.0f, 0.0f },
+        .ambient{ 1.0f, 0.0f, 0.0f },
+        .diffuse{ 1.0f, 0.0f, 0.0f },
         .specular{ 1.0f, 0.0f, 0.0f },
 
         .constant = 1.0f,
@@ -463,27 +474,18 @@ constexpr std::array point_light_components{
         .quadratic = 0.032f,
     },
     game::point_light_component{
-        .ambient{ 0.0f, 0.0f, 0.05f },
-        .diffuse{ 0.0f, 0.0f, 0.8f },
+        .ambient{ 0.0f, 1.0f, 0.0f },
+        .diffuse{ 0.0f, 1.0f, 0.0f },
+        .specular{ 1.0f, 1.0f, 1.0f },
+
+        .constant = 1.0f,
+        .linear = 0.09f,
+        .quadratic = 0.032f,
+    },
+    game::point_light_component{
+        .ambient{ 0.0f, 0.0f, 1.0f },
+        .diffuse{ 0.0f, 0.0f, 1.0f },
         .specular{ 0.0f, 0.0f, 1.0f },
-
-        .constant = 1.0f,
-        .linear = 0.09f,
-        .quadratic = 0.032f,
-    },
-    game::point_light_component{
-        .ambient{ 0.05f, 0.05f, 0.05f },
-        .diffuse{ 0.8f, 0.8f, 0.8f },
-        .specular{ 1.0f, 1.0f, 1.0f },
-
-        .constant = 1.0f,
-        .linear = 0.09f,
-        .quadratic = 0.032f,
-    },
-    game::point_light_component{
-        .ambient{ 0.05f, 0.05f, 0.05f },
-        .diffuse{ 0.8f, 0.8f, 0.8f },
-        .specular{ 1.0f, 1.0f, 1.0f },
 
         .constant = 1.0f,
         .linear = 0.09f,
