@@ -17,6 +17,7 @@ tl::optional<graphics> graphics::initialize(std::string_view title, glm::ivec2 s
         return tl::nullopt;
     }
     auto current_window = window->make_current(*context, glm::ivec2{}, size, clear_color);
+    current_window.enable(GL_DEPTH_TEST); // TODO: sync with clear in graphics_frame, store behaviour
 
     std::unique_ptr<graphics_state> state{ new graphics_state{
         .frame_buffer_size{ size },
@@ -43,13 +44,12 @@ tl::optional<graphics> graphics::initialize(std::string_view title, glm::ivec2 s
     };
 }
 
-graphics_frame::graphics_frame(gfx::current_window& current_window) : current_window_{ current_window } {
-    current_window_.enable(GL_DEPTH_TEST);
-}
+graphics_frame graphics::new_frame() { return graphics_frame{ current_window }; }
 
-meta::defer<fu2::capacity_default> graphics_frame::begin() {
+graphics_frame::graphics_frame(gfx::current_window& current_window)
+    : finalizer{ [](graphics_frame& self) { self.current_window_.swap_buffers(); } },
+      current_window_{ current_window } {
     current_window_.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    return meta::defer<fu2::capacity_default>{ [&cw = current_window_] { cw.swap_buffers(); } };
 }
 
 } // namespace sl::game

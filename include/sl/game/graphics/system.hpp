@@ -27,9 +27,7 @@ struct graphics_system {
     // Having to keep track of appearing entities/components (essentially caching)
     // might come with other more subtle performance costs.
     template <GfxLayerRequirements Layer>
-    void operator()(graphics_frame& gfx_frame, const graphics_state& gfx_state, Layer& layer) {
-        const auto gfx_frame_end = gfx_frame.begin();
-
+    void operator()(const graphics_frame&, const graphics_state& gfx_state, Layer& layer) {
         using ve_map_t = tsl::robin_map<
             /* vertex */ meta::unique_string,
             /* entity */ std::vector<entt::entity>>;

@@ -518,7 +518,6 @@ int main(int argc, char** argv) {
 
     game::graphics gfx =
         *ASSERT_VAL(game::graphics::initialize("05_gfx_system", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
-    game::graphics_frame gfx_frame{ gfx.current_window };
     game::graphics_system gfx_system;
 
     game::input_system input_system{ *gfx.window };
@@ -732,10 +731,11 @@ int main(int argc, char** argv) {
         input_system(gfx_system.world, gfx.current_window, layer, time_point);
 
         // render
+        const auto gfx_frame = gfx.new_frame();
         gfx_system(gfx_frame, *gfx.state, layer);
 
         // overlay
-        auto imgui_frame = gfx.imgui.new_frame();
+        auto imgui_frame = gfx.imgui.new_frame(); // TODO: require gfx_frame here too
         if (const auto imgui_window = imgui_frame.begin("light")) {
             // ImGui::SliderFloat3(
             //     "directional_light position", glm::value_ptr(directional_light.direction), -10.0f, 10.0f

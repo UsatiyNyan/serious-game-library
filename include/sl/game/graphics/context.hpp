@@ -12,7 +12,7 @@
 #include <sl/meta/conn/dirty.hpp>
 #include <sl/meta/conn/scoped_conn.hpp>
 #include <sl/meta/lifetime/defer.hpp>
-#include <sl/meta/lifetime/immovable.hpp>
+#include <sl/meta/lifetime/finalizer.hpp>
 
 #include <memory>
 #include <tl/optional.hpp>
@@ -24,6 +24,14 @@ struct graphics_state {
     meta::dirty<glm::fvec2> window_content_scale;
 };
 
+class graphics_frame : public meta::finalizer<graphics_frame> {
+public:
+    explicit graphics_frame(gfx::current_window& current_window);
+
+private:
+    gfx::current_window& current_window_;
+};
+
 struct graphics {
     std::unique_ptr<gfx::context> context;
     std::unique_ptr<gfx::window> window;
@@ -32,15 +40,8 @@ struct graphics {
     gfx::imgui_context imgui;
 
     static tl::optional<graphics> initialize(std::string_view title, glm::ivec2 size, glm::fvec4 clear_color);
-};
 
-struct graphics_frame : public meta::immovable {
-public:
-    explicit graphics_frame(gfx::current_window& current_window);
-    meta::defer<fu2::capacity_default> begin();
-
-private:
-    gfx::current_window& current_window_;
+    graphics_frame new_frame();
 };
 
 struct camera_state {
