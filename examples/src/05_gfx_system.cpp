@@ -232,9 +232,9 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                     set_model = std::move(set_model),
                     set_it_model = std::move(set_it_model),
                     set_transform = std::move(set_transform)](
-                    const game::camera_state& camera_state, //
-                    const gfx::bound_shader_program& bound_sp,
-                    layer& layer
+                    layer& layer, //
+                    const game::camera_state& camera_state,
+                    const gfx::bound_shader_program& bound_sp
                 ) mutable {
             set_view_pos(bound_sp, camera_state.position.x, camera_state.position.y, camera_state.position.z);
 
@@ -258,9 +258,9 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                        &set_model,
                        &set_it_model,
                        &set_transform,
+                       &layer,
                        &camera_state,
                        &bound_sp,
-                       &layer,
                        bound_dl_base = dl_buffer.bind_base(0),
                        bound_pl_base = pl_buffer.bind_base(1),
                        bound_sl_base = sl_buffer.bind_base(2)]( //
@@ -317,16 +317,16 @@ shader_component<layer> create_source_shader_component(const std::filesystem::pa
             [ //
                 set_transform = std::move(set_transform),
                 set_light_color = std::move(set_light_color)]( //
+                layer& layer,
                 const game::camera_state& camera_state,
-                const gfx::bound_shader_program& bound_sp,
-                layer& layer
+                const gfx::bound_shader_program& bound_sp
             ) {
                 return [ //
                            &set_transform,
                            &set_light_color,
+                           &layer,
                            &camera_state,
-                           &bound_sp,
-                           &layer]( //
+                           &bound_sp]( //
                            const gfx::bound_vertex_array& bound_va,
                            vertex_component::draw_type& vertex_draw,
                            std::span<const entt::entity> entities
@@ -376,6 +376,22 @@ vertex_component create_vertex_component(
         .draw{ [vb = std::move(vb), eb = std::move(eb)](gfx::draw& draw) { draw.elements(eb); } },
     };
 }
+
+struct global_entity_state {
+    meta::dirty<bool> should_close;
+};
+
+struct player_entity_state {
+    bool q = false;
+    bool w = false;
+    bool e = false;
+    bool a = false;
+    bool s = false;
+    bool d = false;
+    meta::dirty<bool> is_rotating;
+    tl::optional<glm::dvec2> cursor_prev;
+    glm::dvec2 cursor_curr;
+};
 
 } // namespace sl::game
 
@@ -521,8 +537,8 @@ int main(int argc, char** argv) {
     game::graphics gfx =
         *ASSERT_VAL(game::graphics::initialize("05_gfx_system", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
     game::graphics_system gfx_system;
-
     game::input_system input_system{ *gfx.window };
+    rt::time time;
 
     game::layer layer{
         .storage{
@@ -615,6 +631,7 @@ int main(int argc, char** argv) {
 
     const entt::entity global_entity = [&] {
         const entt::entity entity = layer.registry.create();
+        layer.registry.emplace<game::global_entity_state>(entity);
         layer.registry.emplace<game::directional_light_component>(entity, global_directional_light_component);
         auto rot = glm::rotation(gfx_system.world.forward(), glm::normalize(glm::vec3{ -0.2f, -1.0f, -0.3f }));
         layer.registry.emplace<game::transform_component>(
@@ -622,15 +639,21 @@ int main(int argc, char** argv) {
         );
         layer.registry.emplace<game::input_component<game::layer>>(
             entity,
-            [](const gfx::basis&,
-               gfx::current_window& cw,
-               game::layer&,
-               entt::entity,
-               game::input_state& input,
-               const rt::time_point&) {
-                input.keyboard.pressed.at(GLFW_KEY_ESCAPE).then([&cw](bool esc_pressed) {
-                    cw.set_should_close(esc_pressed);
-                });
+            [](game::layer& layer, const game::input_events& input_events, entt::entity entity) {
+                using action = game::keyboard_input_event::action_type;
+                auto& state = *ASSERT_VAL((layer.registry.try_get<game::global_entity_state>(entity)));
+                const sl::meta::pmatch handle{
+                    [&state](const game::keyboard_input_event& keyboard) {
+                        using key = game::keyboard_input_event::key_type;
+                        if (keyboard.key == key::ESCAPE) {
+                            state.should_close.set(state.should_close.get() || keyboard.action == action::PRESS);
+                        }
+                    },
+                    [](const auto&) {},
+                };
+                for (const auto& input_event : input_events) {
+                    handle(input_event);
+                }
             }
         );
         return entity;
@@ -639,6 +662,7 @@ int main(int argc, char** argv) {
 
     const entt::entity player_entity = [&] {
         const entt::entity entity = layer.registry.create();
+        layer.registry.emplace<game::player_entity_state>(entity);
         layer.registry.emplace<game::spot_light_component>(entity, player_spot_light_component);
         layer.registry.emplace<game::transform_component>(
             entity,
@@ -657,66 +681,105 @@ int main(int argc, char** argv) {
         );
         layer.registry.emplace<game::input_component<game::layer>>(
             entity,
-            [](const gfx::basis& world,
-               gfx::current_window& cw,
-               game::layer& layer,
-               entt::entity entity,
-               game::input_state& input,
-               const rt::time_point& time_point) {
-                constexpr auto calculate_tr = [](const gfx::basis& world, const game::keyboard_input_state& keyboard) {
-                    constexpr auto sub = [](bool a, bool b) {
-                        return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
-                    };
-                    const auto& q = keyboard.pressed.at(GLFW_KEY_Q);
-                    const auto& w = keyboard.pressed.at(GLFW_KEY_W);
-                    const auto& e = keyboard.pressed.at(GLFW_KEY_E);
-                    const auto& a = keyboard.pressed.at(GLFW_KEY_A);
-                    const auto& s = keyboard.pressed.at(GLFW_KEY_S);
-                    const auto& d = keyboard.pressed.at(GLFW_KEY_D);
-                    return sub(e.get(), q.get()) * world.up() + //
-                           sub(d.get(), a.get()) * world.right() + //
-                           sub(w.get(), s.get()) * world.forward();
+            [](game::layer& layer, const game::input_events& input_events, entt::entity entity) {
+                using action = game::keyboard_input_event::action_type;
+                auto& state = *ASSERT_VAL((layer.registry.try_get<game::player_entity_state>(entity)));
+                const sl::meta::pmatch handle{
+                    [&state](const game::keyboard_input_event& keyboard) {
+                        using key = game::keyboard_input_event::key_type;
+                        const bool is_down = keyboard.action == action::PRESS || keyboard.action == action::REPEAT;
+                        switch (keyboard.key) {
+                        case key::Q:
+                            state.q = is_down;
+                            break;
+                        case key::W:
+                            state.w = is_down;
+                            break;
+                        case key::E:
+                            state.e = is_down;
+                            break;
+                        case key::A:
+                            state.a = is_down;
+                            break;
+                        case key::S:
+                            state.s = is_down;
+                            break;
+                        case key::D:
+                            state.d = is_down;
+                            break;
+                        default:
+                            break;
+                        }
+                    },
+                    [&state](const game::mouse_button_input_event& mouse_button) {
+                        using button = game::mouse_button_input_event::button_type;
+                        if (mouse_button.button == button::RIGHT) {
+                            state.is_rotating.set(
+                                mouse_button.action == action::PRESS || mouse_button.action == action::REPEAT
+                            );
+                        }
+                    },
+                    [&state](const game::cursor_input_event& cursor) {
+                        // protection against multiple cursor events between updates
+                        if (!state.cursor_prev.has_value()) {
+                            state.cursor_prev.emplace(state.cursor_curr);
+                        }
+                        state.cursor_curr = cursor.pos;
+                    },
                 };
-
-                if (const bool has_components = layer.registry.all_of<game::transform_component>(entity);
+                for (const auto& input_event : input_events) {
+                    handle(input_event);
+                }
+            }
+        );
+        layer.registry.emplace<game::update_component<game::layer>>(
+            entity,
+            [](game::layer& layer, const gfx::basis& world, const rt::time_point& time_point, entt::entity entity) {
+                if (const bool has_components =
+                        layer.registry.all_of<game::player_entity_state, game::transform_component>(entity);
                     !ASSUME_VAL(has_components)) {
                     return;
                 }
 
-                auto& rmb_pressed = input.mouse.pressed.at(GLFW_MOUSE_BUTTON_RIGHT);
-                rmb_pressed.then([&cw](bool cursor_hidden) {
-                    cw.set_input_mode(GLFW_CURSOR, cursor_hidden ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-                });
-
+                auto& state = layer.registry.get<game::player_entity_state>(entity);
                 auto& tf = layer.registry.get<game::transform_component>(entity).tf;
-                if (rmb_pressed.get()) {
-                    input.cursor.offset().map([&world, &tf](const glm::dvec2& cursor_offset) {
-                        constexpr float sensitivity = -glm::radians(0.2f);
-                        const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
-                        const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
 
-                        const glm::quat rot_yaw = glm::angleAxis(yaw, world.y);
-                        tf.rotate(rot_yaw);
+                if (const sl::meta::defer consume{ [&state] { state.cursor_prev.reset(); } };
+                    state.cursor_prev.has_value() && state.is_rotating.get()) {
+                    const auto cursor_offset = state.cursor_curr - state.cursor_prev.value();
 
-                        const glm::vec3 camera_forward = tf.rot * world.forward();
-                        const glm::vec3 camera_right = glm::cross(camera_forward, world.up());
-                        const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
-                        tf.rotate(rot_pitch);
-                    });
+                    constexpr float sensitivity = -glm::radians(0.2f);
+                    const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
+                    const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
+
+                    const glm::quat rot_yaw = glm::angleAxis(yaw, world.y);
+                    tf.rotate(rot_yaw);
+
+                    const glm::vec3 camera_forward = tf.rot * world.forward();
+                    const glm::vec3 camera_right = glm::cross(camera_forward, world.up());
+                    const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
+                    tf.rotate(rot_pitch);
                 }
+
                 {
                     constexpr float acc = 5.0f;
                     const float speed = acc * time_point.delta_sec().count();
-                    const auto tr = calculate_tr(world, input.keyboard);
-                    tf.translate(speed * (tf.rot * tr));
+                    const auto new_tr = [&state, &world] {
+                        constexpr auto sub = [](bool a, bool b) {
+                            return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
+                        };
+                        return sub(state.e, state.q) * world.up() + //
+                               sub(state.d, state.a) * world.right() + //
+                               sub(state.w, state.s) * world.forward();
+                    }();
+                    tf.translate(speed * (tf.rot * new_tr));
                 }
             }
         );
+
         return entity;
     }();
     const sl::meta::defer destroy_player_entity{ [&] { layer.registry.destroy(player_entity); } };
-
-    rt::time time;
 
     while (!gfx.current_window.should_close()) {
         // input
@@ -727,14 +790,26 @@ int main(int argc, char** argv) {
         gfx.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
             ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
         });
+        input_system(layer);
+
+        // update window
+        layer.registry
+            .get<game::global_entity_state>(global_entity) //
+            .should_close.then([&](bool should_close) { gfx.current_window.set_should_close(should_close); });
+
+        layer.registry
+            .get<game::player_entity_state>(player_entity) //
+            .is_rotating.then([&](bool is_rotating) {
+                gfx.current_window.set_input_mode(GLFW_CURSOR, is_rotating ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+            });
 
         // update
         const rt::time_point time_point = time.calculate();
-        input_system(gfx_system.world, gfx.current_window, layer, time_point);
+        update_system(layer, gfx_system.world, time_point);
 
         // render
         const auto gfx_frame = gfx.new_frame();
-        gfx_system(gfx_frame, *gfx.state, layer);
+        gfx_system(layer, gfx_frame, *gfx.state);
 
         // overlay
         auto imgui_frame = gfx.imgui.new_frame(); // TODO: require gfx_frame here too

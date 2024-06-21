@@ -1,6 +1,7 @@
 //
 // Created by usatiynyan.
 //
+// TODO: maybe move to gfx library and change signals
 
 #pragma once
 
@@ -41,7 +42,7 @@ enum class input_event_mod : std::uint8_t {
 
 using input_event_mods = meta::enum_flag<input_event_mod>;
 
-constexpr input_event_mods input_event_mods_from_gltf(int mods) {
+constexpr input_event_mods input_event_mods_from_glfw(int mods) {
     return input_event_mods{ static_cast<std::uint8_t>(mods) };
 }
 
@@ -424,7 +425,6 @@ constexpr keyboard_input_event keyboard_input_event_from_glfw(int key) {
 }
 
 enum class mouse_button_input_event : std::uint8_t {
-    MB_0,
     MB_1,
     MB_2,
     MB_3,
@@ -432,6 +432,7 @@ enum class mouse_button_input_event : std::uint8_t {
     MB_5,
     MB_6,
     MB_7,
+    MB_8,
     ENUM_END,
     LEFT = MB_1,
     RIGHT = MB_2,
@@ -442,21 +443,21 @@ constexpr mouse_button_input_event mouse_button_input_event_from_glfw(int button
     static_assert(GLFW_MOUSE_BUTTON_LAST == GLFW_MOUSE_BUTTON_8);
     switch (button) {
     case GLFW_MOUSE_BUTTON_1:
-        return mouse_button_input_event::MB_0;
-    case GLFW_MOUSE_BUTTON_2:
         return mouse_button_input_event::MB_1;
-    case GLFW_MOUSE_BUTTON_3:
+    case GLFW_MOUSE_BUTTON_2:
         return mouse_button_input_event::MB_2;
-    case GLFW_MOUSE_BUTTON_4:
+    case GLFW_MOUSE_BUTTON_3:
         return mouse_button_input_event::MB_3;
-    case GLFW_MOUSE_BUTTON_5:
+    case GLFW_MOUSE_BUTTON_4:
         return mouse_button_input_event::MB_4;
-    case GLFW_MOUSE_BUTTON_6:
+    case GLFW_MOUSE_BUTTON_5:
         return mouse_button_input_event::MB_5;
-    case GLFW_MOUSE_BUTTON_7:
+    case GLFW_MOUSE_BUTTON_6:
         return mouse_button_input_event::MB_6;
-    case GLFW_MOUSE_BUTTON_8:
+    case GLFW_MOUSE_BUTTON_7:
         return mouse_button_input_event::MB_7;
+    case GLFW_MOUSE_BUTTON_8:
+        return mouse_button_input_event::MB_8;
     default:
         return mouse_button_input_event::ENUM_END;
     }

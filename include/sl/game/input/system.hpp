@@ -5,6 +5,7 @@
 #pragma once
 
 #include "sl/game/input/component.hpp"
+#include "sl/game/input/detail.hpp"
 #include "sl/game/input/event.hpp"
 #include "sl/game/layer.hpp"
 
@@ -18,21 +19,21 @@ concept InputLayerRequirements = GameLayerRequirements<Layer>;
 class input_system {
 public:
     // attach to window
-    explicit input_system(gfx::window& window)
-        : queue_{ 128 }, //
+    explicit input_system(gfx::window& window, std::size_t queue_capacity = 128)
+        : queue_{ queue_capacity }, //
           key_conn_{ window.key_cb.connect([this](int key, int /* scancode */, int action, int mods) {
               // TODO: scancode?
               queue_.push(keyboard_input_event{
-                  .key{ static_cast<std::uint8_t>(key) },
-                  .action{ static_cast<std::uint8_t>(action) },
-                  .mods{ static_cast<std::uint8_t>(mods) },
+                  .key = detail::keyboard_input_event_from_glfw(key),
+                  .action = detail::input_event_action_from_glfw(action),
+                  .mods = detail::input_event_mods_from_glfw(mods),
               });
           }) },
           mouse_button_conn_{ window.mouse_button_cb.connect([this](int button, int action, int mods) {
               queue_.push(mouse_button_input_event{
-                  .button{ static_cast<std::uint8_t>(button) },
-                  .action{ static_cast<std::uint8_t>(action) },
-                  .mods{ static_cast<std::uint8_t>(mods) },
+                  .button = detail::mouse_button_input_event_from_glfw(button),
+                  .action = detail::input_event_action_from_glfw(action),
+                  .mods = detail::input_event_mods_from_glfw(mods),
               });
           }) },
           cursor_pos_conn_{ window.cursor_pos_cb.connect([this](glm::dvec2 cursor_pos) {
@@ -43,8 +44,9 @@ public:
     void operator()(Layer& layer) {
         auto entities = layer.registry.template view<input_component<Layer>>();
         for (auto&& [entity, input] : entities.each()) {
-            input.handler(layer, entity, queue_.events());
+            input.handler(layer, queue_.events(), entity);
         }
+        queue_.clear();
     }
 
 private:

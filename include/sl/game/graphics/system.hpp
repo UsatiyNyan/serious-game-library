@@ -27,7 +27,7 @@ struct graphics_system {
     // Having to keep track of appearing entities/components (essentially caching)
     // might come with other more subtle performance costs.
     template <GfxLayerRequirements Layer>
-    void operator()(const graphics_frame&, const graphics_state& gfx_state, Layer& layer) {
+    void operator()(Layer& layer, const graphics_frame&, const graphics_state& gfx_state) {
         using ve_map_t = tsl::robin_map<
             /* vertex */ meta::unique_string,
             /* entity */ std::vector<entt::entity>>;
@@ -66,7 +66,7 @@ struct graphics_system {
                 }
 
                 const auto bound_sp = shader_component->sp.bind();
-                auto draw = shader_component->setup(camera_state, bound_sp, layer);
+                auto draw = shader_component->setup(layer, camera_state, bound_sp);
                 if (!ASSUME_VAL(draw)) {
                     continue;
                 }

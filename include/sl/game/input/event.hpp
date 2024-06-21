@@ -15,25 +15,25 @@
 namespace sl::game {
 
 struct keyboard_input_event {
-    using key_t = detail::keyboard_input_event;
-    using action_t = detail::input_event_action;
-    using mod_t = detail::input_event_mod;
-    using mods_t = detail::input_event_mods;
+    using key_type = detail::keyboard_input_event;
+    using action_type = detail::input_event_action;
+    using mod_type = detail::input_event_mod;
+    using mods_type = detail::input_event_mods;
 
-    key_t key;
-    action_t action;
-    mods_t mods;
+    key_type key;
+    action_type action;
+    mods_type mods;
 };
 
 struct mouse_button_input_event {
-    using button_t = detail::mouse_button_input_event;
-    using action_t = detail::input_event_action;
-    using mod_t = detail::input_event_mod;
-    using mods_t = detail::input_event_mods;
+    using button_type = detail::mouse_button_input_event;
+    using action_type = detail::input_event_action;
+    using mod_type = detail::input_event_mod;
+    using mods_type = detail::input_event_mods;
 
-    button_t button;
-    action_t action;
-    mods_t mods;
+    button_type button;
+    action_type action;
+    mods_type mods;
 };
 
 struct cursor_input_event {

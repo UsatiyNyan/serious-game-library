@@ -61,7 +61,7 @@ struct shader_component {
 
     using draw_type = component_callback<
         void(const gfx::bound_vertex_array&, vertex_component::draw_type&, std::span<const entt::entity>)>;
-    component_callback<draw_type(const camera_state&, const gfx::bound_shader_program&, Layer&)> setup;
+    component_callback<draw_type(Layer&, const camera_state&, const gfx::bound_shader_program&)> setup;
 };
 
 struct transform_component {
