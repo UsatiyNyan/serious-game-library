@@ -14,19 +14,15 @@ namespace game = sl::game;
 int main() {
     spdlog::set_level(spdlog::level::debug);
 
-    game::graphics gfx =
-        *ASSERT_VAL(game::graphics::initialize("00_blank_window", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
-
-    game::generic_input<bool(const sl::gfx::current_window&), 1> is_esc_pressed;
-    auto detach_is_esc_pressed =
-        is_esc_pressed.attach([](const sl::gfx::current_window& cw) { return cw.is_key_pressed(GLFW_KEY_ESCAPE); });
+    auto gfx =
+        *ASSERT_VAL(game::window_context::initialize("00_blank_window", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
     while (!gfx.current_window.should_close()) {
         // input
         gfx.context->poll_events();
         gfx.state->frame_buffer_size.then([&cw = gfx.current_window](glm::ivec2 x) { cw.viewport(glm::ivec2{}, x); });
 
-        if (is_esc_pressed(gfx.current_window).value_or(false)) {
+        if (gfx.current_window.is_key_pressed(GLFW_KEY_ESCAPE)) {
             gfx.current_window.set_should_close(true);
         }
 

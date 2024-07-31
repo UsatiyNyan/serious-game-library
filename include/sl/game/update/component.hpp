@@ -4,15 +4,14 @@
 
 #pragma once
 
+#include "sl/game/graphics/component/basis.hpp"
 #include "sl/game/layer.hpp"
-
-#include <sl/gfx/primitives/basis.hpp>
 
 namespace sl::game {
 
 template <typename Layer>
-struct update_component {
-    using handler_type = component_callback<void(Layer&, const gfx::basis&, const rt::time_point&, entt::entity)>;
+struct update {
+    using handler_type = component_callback<void(Layer&, const basis&, const rt::time_point&, entt::entity)>;
     handler_type handler;
 };
 

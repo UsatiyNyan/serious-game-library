@@ -1,5 +1,6 @@
 //
 // Created by usatiynyan.
+// TODO: fix this
 //
 
 #include <imgui.h>
@@ -168,11 +169,10 @@ int main(int argc, char** argv) {
 
     spdlog::set_level(spdlog::level::info);
 
-    game::graphics graphics =
-        *ASSERT_VAL(game::graphics::initialize("01_lighting", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+    auto wctx = *ASSERT_VAL(game::window_context::initialize("01_lighting", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
 
     keys_input_state kis;
-    (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
+    (void)wctx.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
         const bool is_pressed = action == GLFW_PRESS || action == GLFW_REPEAT;
         switch (key) {
         case GLFW_KEY_ESCAPE:
@@ -200,20 +200,20 @@ int main(int argc, char** argv) {
     });
 
     mouse_input_state mis;
-    (void)graphics.window->mouse_button_cb.connect([&mis](int button, int action, int mods [[maybe_unused]]) {
+    (void)wctx.window->mouse_button_cb.connect([&mis](int button, int action, int mods [[maybe_unused]]) {
         if (button == GLFW_MOUSE_BUTTON_RIGHT) {
             mis.right.set(action == GLFW_PRESS || action == GLFW_REPEAT);
         }
     });
 
     cursor_input_state cis;
-    (void)graphics.window->cursor_pos_cb.connect([&cis](glm::dvec2 cursor_pos) { cis.curr.set(cursor_pos); });
+    (void)wctx.window->cursor_pos_cb.connect([&cis](glm::dvec2 cursor_pos) { cis.curr.set(cursor_pos); });
 
     constexpr auto calculate_tr = [](const keys_input_state& kis) {
         constexpr auto sub = [](bool a, bool b) {
             return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
         };
-        constexpr gfx::basis local;
+        constexpr game::basis local;
         return sub(kis.e.get(), kis.q.get()) * local.up() + //
                sub(kis.d.get(), kis.a.get()) * local.right() + //
                sub(kis.w.get(), kis.s.get()) * local.forward();
@@ -234,7 +234,7 @@ int main(int argc, char** argv) {
             .value_or(tl::nullopt);
     };
 
-    constexpr auto camera_update = [](gfx::camera& camera,
+    constexpr auto camera_update = [](camera& camera,
                                       std::chrono::duration<float> delta_time,
                                       const glm::vec3& tr,
                                       const tl::optional<glm::dvec2>& maybe_cursor_offset) {
@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
             const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
             const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
 
-            constexpr gfx::basis local;
+            constexpr basis local;
             const glm::quat rot_yaw = glm::angleAxis(yaw, local.y);
             camera.tf.rotate(rot_yaw);
 
@@ -286,19 +286,19 @@ int main(int argc, char** argv) {
 
     rt::time time;
 
-    while (!graphics.current_window.should_close()) {
+    while (!wctx.current_window.should_close()) {
         // input
-        graphics.context->poll_events();
+        wctx.context->poll_events();
 
         // process input
-        graphics.state->frame_buffer_size.then([&cw = graphics.current_window](glm::ivec2 frame_buffer_size) {
+        wctx.state->frame_buffer_size.then([&cw = wctx.current_window](glm::ivec2 frame_buffer_size) {
             cw.viewport(glm::ivec2{}, frame_buffer_size);
         });
-        graphics.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
+        wctx.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
             ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
         });
-        kis.esc.then([&cw = graphics.current_window](bool esc) { cw.set_should_close(esc); });
-        mis.right.then([&cw = graphics.current_window](bool right) {
+        kis.esc.then([&cw = wctx.current_window](bool esc) { cw.set_should_close(esc); });
+        mis.right.then([&cw = wctx.current_window](bool right) {
             cw.set_input_mode(GLFW_CURSOR, right ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
         });
 
@@ -309,7 +309,7 @@ int main(int argc, char** argv) {
         camera_update(render.camera, delta_time, tr, maybe_cursor_offset);
 
         // render
-        auto bound_render = render.bind(graphics.current_window, *graphics.state);
+        auto bound_render = render.bind(wctx.current_window, *wctx.state);
 
         // source
         {
@@ -363,7 +363,7 @@ int main(int argc, char** argv) {
         }
 
         // overlay
-        auto imgui_frame = graphics.imgui.new_frame();
+        auto imgui_frame = wctx.imgui.new_frame();
         if (const auto imgui_window = imgui_frame.begin("light")) {
             ImGui::SliderFloat3("light pos", glm::value_ptr(source_position), -10.0f, 10.0f);
             ImGui::ColorEdit3("light color", glm::value_ptr(source_color));

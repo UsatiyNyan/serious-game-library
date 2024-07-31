@@ -4,10 +4,12 @@
 
 #pragma once
 
+#include "sl/game/graphics/component/basis.hpp"
+#include "sl/game/graphics/component/camera.hpp"
+
 #include <sl/gfx/ctx/context.hpp>
 #include <sl/gfx/ctx/imgui.hpp>
 #include <sl/gfx/ctx/window.hpp>
-#include <sl/gfx/primitives/basis.hpp>
 
 #include <sl/meta/conn/dirty.hpp>
 #include <sl/meta/conn/scoped_conn.hpp>
@@ -19,37 +21,44 @@
 
 namespace sl::game {
 
-struct graphics_state {
+class window_frame;
+
+struct window_state {
     meta::dirty<glm::ivec2> frame_buffer_size;
     meta::dirty<glm::fvec2> window_content_scale;
 };
 
-// TODO: move into gfx
-class graphics_frame : public meta::finalizer<graphics_frame> {
+struct window_context {
+    [[nodiscard]] static tl::optional<window_context>
+        initialize(std::string_view title, glm::ivec2 size, glm::fvec4 clear_color);
+    [[nodiscard]] window_frame new_frame();
+
 public:
-    explicit graphics_frame(gfx::current_window& current_window);
-
-private:
-    gfx::current_window& current_window_;
-};
-
-struct graphics {
     std::unique_ptr<gfx::context> context;
     std::unique_ptr<gfx::window> window;
     gfx::current_window current_window;
-    std::unique_ptr<graphics_state> state;
+    std::unique_ptr<window_state> state;
     gfx::imgui_context imgui;
 
-    static tl::optional<graphics> initialize(std::string_view title, glm::ivec2 size, glm::fvec4 clear_color);
-
-    graphics_frame new_frame();
+    // TODO: is there a better place for that?
+    static constexpr basis world;
 };
 
-struct camera_state {
-    gfx::basis world;
+struct camera_frame {
+    basis world;
     glm::vec3 position;
     glm::mat4 projection;
     glm::mat4 view;
+};
+
+class window_frame : public meta::finalizer<window_frame> {
+public:
+    explicit window_frame(window_context& ctx);
+
+    [[nodiscard]] camera_frame for_camera(const camera& camera, const transform& tf) const;
+
+private:
+    window_context& ctx_;
 };
 
 } // namespace sl::game
