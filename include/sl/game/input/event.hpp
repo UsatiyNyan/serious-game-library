@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "sl/game/common/log.hpp"
+#include "sl/game/detail/log.hpp"
 #include "sl/game/input/detail.hpp"
 
 #include <glm/glm.hpp>

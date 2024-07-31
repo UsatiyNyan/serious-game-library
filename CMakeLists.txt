@@ -22,7 +22,7 @@ project(
         LANGUAGES C CXX)
 
 add_library(${PROJECT_NAME} STATIC
-        src/common/log.cpp
+        src/detail/log.cpp
         src/graphics/context.cpp)
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 

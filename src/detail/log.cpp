@@ -2,7 +2,7 @@
 // Created by usatiynyan.
 //
 
-#include "sl/game/common/log.hpp"
+#include "sl/game/detail/log.hpp"
 
 namespace sl::game {
 

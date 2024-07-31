@@ -33,4 +33,5 @@ template <typename Layer>
 concept GameLayerRequirements = requires(Layer& layer) {
     { layer.registry } -> std::same_as<entt::registry&>;
 };
+
 } // namespace sl::game
