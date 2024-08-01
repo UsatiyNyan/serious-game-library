@@ -32,6 +32,7 @@ using component_callback = fu2::function_base<
 template <typename Layer>
 concept GameLayerRequirements = requires(Layer& layer) {
     { layer.registry } -> std::same_as<entt::registry&>;
+    { layer.root } -> std::convertible_to<entt::entity>;
 };
 
 } // namespace sl::game

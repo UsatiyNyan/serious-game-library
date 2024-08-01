@@ -12,8 +12,8 @@ namespace sl::game {
 namespace detail {
 
 template <GameLayerRequirements Layer>
-void tree_update_top_down(Layer& layer, entt::entity root, const rt::time_point& time_point, update<Layer> update) {
-    std::deque<entt::entity> queue{ root };
+void tree_update_top_down(Layer& layer, update<Layer> update, rt::time_point time_point) {
+    std::deque<entt::entity> queue{ layer.root };
 
     while (!queue.empty()) {
         const entt::entity node_entity = queue.front();
@@ -30,8 +30,8 @@ void tree_update_top_down(Layer& layer, entt::entity root, const rt::time_point&
 }
 
 template <GameLayerRequirements Layer>
-void tree_update_bottom_up(Layer& layer, entt::entity root, const rt::time_point& time_point, update<Layer> update) {
-    std::vector<entt::entity> tmp{ root };
+void tree_update_bottom_up(Layer& layer, update<Layer> update, rt::time_point time_point) {
+    std::vector<entt::entity> tmp{ layer.root };
     std::vector<entt::entity> accum;
 
     while (!tmp.empty()) {
@@ -60,19 +60,13 @@ enum class tree_update_order {
 };
 
 template <GameLayerRequirements Layer>
-void tree_update_system(
-    tree_update_order order,
-    Layer& layer,
-    entt::entity root,
-    const rt::time_point& time_point,
-    update<Layer> update
-) {
+void tree_update_system(tree_update_order order, Layer& layer, update<Layer> update, rt::time_point time_point) {
     switch (order) {
     case tree_update_order::TOP_DOWN:
-        detail::tree_update_top_down(layer, root, time_point, std::move(update));
+        detail::tree_update_top_down(layer, std::move(update), time_point);
         break;
     case tree_update_order::BOTTOM_UP:
-        detail::tree_update_bottom_up(layer, root, time_point, std::move(update));
+        detail::tree_update_bottom_up(layer, std::move(update), time_point);
         break;
     default:
         PANIC();
@@ -83,10 +77,10 @@ template <typename Layer>
 concept UpdateLayerRequirements = GameLayerRequirements<Layer>;
 
 template <UpdateLayerRequirements Layer>
-void update_system(Layer& layer, const rt::time_point& time_point) {
+void update_system(Layer& layer, rt::time_point time_point) {
     auto entities = layer.registry.template view<update<Layer>>();
     for (auto&& [entity, update] : entities.each()) {
-        update(layer, time_point, entity);
+        update(layer, entity, time_point);
     }
 }
 

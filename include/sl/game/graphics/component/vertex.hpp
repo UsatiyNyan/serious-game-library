@@ -27,6 +27,16 @@ struct texture {
     gfx::texture tex;
 };
 
+struct material {
+    struct id {
+        meta::unique_string id;
+    };
+
+    meta::persistent<texture> diffuse;
+    meta::persistent<texture> specular;
+    float shininess;
+};
+
 struct vertex {
     struct id {
         meta::unique_string id;
