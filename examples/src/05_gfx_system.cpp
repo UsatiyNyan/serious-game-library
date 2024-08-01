@@ -1,6 +1,5 @@
 //
 // Created by usatiynyan.
-// TODO: fix this
 //
 
 #include <imgui.h>
@@ -23,13 +22,13 @@
 
 namespace sl::game {
 
-struct directional_light_component {
+struct directional_light {
     glm::vec3 ambient;
     glm::vec3 diffuse;
     glm::vec3 specular;
 };
 
-struct point_light_component {
+struct point_light {
     glm::vec3 ambient;
     glm::vec3 diffuse;
     glm::vec3 specular;
@@ -39,7 +38,7 @@ struct point_light_component {
     float quadratic;
 };
 
-struct spot_light_component {
+struct spot_light {
     glm::vec3 ambient;
     glm::vec3 diffuse;
     glm::vec3 specular;
@@ -59,10 +58,9 @@ struct directional_light_buffer_element {
     alignas(16) glm::vec3 diffuse;
     alignas(16) glm::vec3 specular;
 
-    static directional_light_buffer_element
-        from_component(const gfx::basis& world, const transform_component& tf, const directional_light_component& dl) {
+    static directional_light_buffer_element from(const basis& world, const transform& tf, const directional_light& dl) {
         return {
-            .direction = tf.direction(world),
+            .direction = world.direction(tf),
             .ambient = dl.ambient,
             .diffuse = dl.diffuse,
             .specular = dl.specular,
@@ -81,10 +79,9 @@ struct point_light_buffer_element {
     float linear;
     float quadratic;
 
-    static point_light_buffer_element
-        from_component(const gfx::basis&, const transform_component& tf, const point_light_component& pl) {
+    static point_light_buffer_element from(const basis&, const transform& tf, const point_light& pl) {
         return {
-            .position = tf.tf.tr,
+            .position = tf.tr,
             .ambient = pl.ambient,
             .diffuse = pl.diffuse,
             .specular = pl.specular,
@@ -109,11 +106,10 @@ struct spot_light_buffer_element {
     float cutoff;
     float outer_cutoff;
 
-    static spot_light_buffer_element
-        from_component(const gfx::basis& world, const transform_component& tf, const spot_light_component& sl) {
+    static spot_light_buffer_element from(const basis& world, const transform& tf, const spot_light& sl) {
         return {
-            .position = tf.tf.tr,
-            .direction = tf.direction(world),
+            .position = tf.tr,
+            .direction = world.direction(tf),
             .ambient = sl.ambient,
             .diffuse = sl.diffuse,
             .specular = sl.specular,
@@ -135,7 +131,7 @@ auto init_ssbo(std::size_t size) {
 
 template <typename ComponentView, typename T>
 std::uint32_t set_ssbo_data(
-    const gfx::basis& world,
+    const basis& world,
     ComponentView component_view,
     gfx::buffer<T, gfx::buffer_type::shader_storage, gfx::buffer_usage::dynamic_draw>& ssbo
 ) {
@@ -149,23 +145,23 @@ std::uint32_t set_ssbo_data(
             spdlog::warn("exceeded limit of components: {}", mapped_ssbo_data.size());
             break;
         }
-        mapped_ssbo_data[size_counter] = T::from_component(world, tf, elem);
+        mapped_ssbo_data[size_counter] = T::from(world, tf, elem);
         ++size_counter;
     }
     return size_counter;
 };
 
-struct material_component {
+struct material {
     struct id {
         meta::unique_string id;
     };
 
-    meta::persistent<texture_component> diffuse;
-    meta::persistent<texture_component> specular;
+    meta::persistent<texture> diffuse;
+    meta::persistent<texture> specular;
     float shininess;
 };
 
-texture_component create_texture_component(const std::filesystem::path& image_path) {
+texture create_texture(const std::filesystem::path& image_path) {
     gfx::texture_builder tex_builder{ gfx::texture_type::texture_2d };
     tex_builder.set_wrap_s(gfx::texture_wrap::repeat);
     tex_builder.set_wrap_t(gfx::texture_wrap::repeat);
@@ -174,21 +170,22 @@ texture_component create_texture_component(const std::filesystem::path& image_pa
 
     const auto image = *ASSERT_VAL(stb::image_load(image_path, 4));
     tex_builder.set_image(std::span{ image.dimensions }, gfx::texture_format{ GL_RGB, GL_RGBA }, image.data.get());
-    return texture_component{ .tex = std::move(tex_builder).submit() };
+    return texture{ .tex = std::move(tex_builder).submit() };
 }
 
 struct layer {
     struct {
         meta::unique_string_storage string;
-        storage<shader_component<layer>> shader;
-        storage<vertex_component> vertex;
-        storage<texture_component> texture;
-        storage<material_component> material;
+        storage<shader<layer>> shader;
+        storage<vertex> vertex;
+        storage<texture> texture;
+        storage<material> material;
     } storage;
     entt::registry registry;
+    static constexpr basis world;
 };
 
-shader_component<layer> create_object_shader_component(const std::filesystem::path& root) {
+shader<layer> create_object_shader(const std::filesystem::path& root) {
     const std::array<gfx::shader, 2> shaders{
         *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::vertex, root / "shaders/05_object.vert")),
         *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::fragment, root / "shaders/05_object.frag")),
@@ -219,7 +216,7 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
     auto pl_buffer = init_ssbo<point_light_buffer_element>(16);
     auto sl_buffer = init_ssbo<spot_light_buffer_element>(1);
 
-    return shader_component<layer>{
+    return shader<layer>{
         .sp{ std::move(sp) },
         .setup{ [ //
                     set_view_pos = std::move(set_view_pos),
@@ -234,24 +231,21 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                     set_it_model = std::move(set_it_model),
                     set_transform = std::move(set_transform)](
                     layer& layer, //
-                    const game::camera_state& camera_state,
+                    const game::camera_frame& camera_frame,
                     const gfx::bound_shader_program& bound_sp
                 ) mutable {
-            set_view_pos(bound_sp, camera_state.position.x, camera_state.position.y, camera_state.position.z);
+            set_view_pos(bound_sp, camera_frame.position.x, camera_frame.position.y, camera_frame.position.z);
 
-            const std::uint32_t dl_size = set_ssbo_data(
-                camera_state.world, layer.registry.view<transform_component, directional_light_component>(), dl_buffer
-            );
+            const std::uint32_t dl_size =
+                set_ssbo_data(layer.world, layer.registry.view<transform, directional_light>(), dl_buffer);
             set_dl_size(bound_sp, dl_size);
 
-            const std::uint32_t pl_size = set_ssbo_data(
-                camera_state.world, layer.registry.view<transform_component, point_light_component>(), pl_buffer
-            );
+            const std::uint32_t pl_size =
+                set_ssbo_data(layer.world, layer.registry.view<transform, point_light>(), pl_buffer);
             set_pl_size(bound_sp, pl_size);
 
-            const std::uint32_t sl_size = set_ssbo_data(
-                camera_state.world, layer.registry.view<transform_component, spot_light_component>(), sl_buffer
-            );
+            const std::uint32_t sl_size =
+                set_ssbo_data(layer.world, layer.registry.view<transform, spot_light>(), sl_buffer);
             set_sl_size(bound_sp, sl_size);
 
             return [ //
@@ -260,34 +254,32 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
                        &set_it_model,
                        &set_transform,
                        &layer,
-                       &camera_state,
+                       &camera_frame,
                        &bound_sp,
                        bound_dl_base = dl_buffer.bind_base(0),
                        bound_pl_base = pl_buffer.bind_base(1),
                        bound_sl_base = sl_buffer.bind_base(2)]( //
                        const gfx::bound_vertex_array& bound_va,
-                       vertex_component::draw_type& vertex_draw,
+                       vertex::draw_type& vertex_draw,
                        std::span<const entt::entity> entities
                    ) {
                 for (const entt::entity entity : entities) {
-                    if (const bool has_components =
-                            layer.registry.all_of<transform_component, material_component::id>(entity);
-                        !ASSUME_VAL(has_components)) {
+                    if (const bool hass = layer.registry.all_of<transform, material::id>(entity); !ASSUME_VAL(hass)) {
                         continue;
                     }
 
-                    const auto& tf = layer.registry.get<transform_component>(entity);
-                    const glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), tf.tf.tr);
-                    const glm::mat4 rotation_matrix = glm::mat4_cast(tf.tf.rot);
+                    const auto& tf = layer.registry.get<transform>(entity);
+                    const glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), tf.tr);
+                    const glm::mat4 rotation_matrix = glm::mat4_cast(tf.rot);
                     // TODO: scale
                     const glm::mat4 model = translation_matrix * rotation_matrix;
                     const glm::mat3 it_model = glm::transpose(glm::inverse(model));
-                    const glm::mat4 transform = camera_state.projection * camera_state.view * model;
+                    const glm::mat4 transform = camera_frame.projection * camera_frame.view * model;
                     set_model(bound_sp, glm::value_ptr(model));
                     set_it_model(bound_sp, glm::value_ptr(it_model));
                     set_transform(bound_sp, glm::value_ptr(transform));
 
-                    const auto& mtl_id = layer.registry.get<material_component::id>(entity);
+                    const auto& mtl_id = layer.registry.get<material::id>(entity);
                     const auto mtl = *ASSERT_VAL(layer.storage.material.lookup(mtl_id.id));
                     const std::array texs{ mtl->diffuse, mtl->specular };
                     const auto bound_texs = gfx::activate_textures(
@@ -303,7 +295,7 @@ shader_component<layer> create_object_shader_component(const std::filesystem::pa
     };
 }
 
-shader_component<layer> create_source_shader_component(const std::filesystem::path& root) {
+shader<layer> create_source_shader(const std::filesystem::path& root) {
     const std::array<gfx::shader, 2> shaders{
         *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::vertex, root / "shaders/05_source.vert")),
         *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::fragment, root / "shaders/05_source.frag")),
@@ -312,40 +304,39 @@ shader_component<layer> create_source_shader_component(const std::filesystem::pa
     auto sp_bind = sp.bind();
     auto set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false));
     auto set_light_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_color"));
-    return shader_component<layer>{
+    return shader<layer>{
         .sp = std::move(sp),
         .setup{
             [ //
                 set_transform = std::move(set_transform),
                 set_light_color = std::move(set_light_color)]( //
                 layer& layer,
-                const game::camera_state& camera_state,
+                const game::camera_frame& camera_frame,
                 const gfx::bound_shader_program& bound_sp
             ) {
                 return [ //
                            &set_transform,
                            &set_light_color,
                            &layer,
-                           &camera_state,
+                           &camera_frame,
                            &bound_sp]( //
                            const gfx::bound_vertex_array& bound_va,
-                           vertex_component::draw_type& vertex_draw,
+                           vertex::draw_type& vertex_draw,
                            std::span<const entt::entity> entities
                        ) {
                     for (const entt::entity entity : entities) {
-                        if (const bool has_components =
-                                layer.registry.all_of<transform_component, point_light_component>(entity);
-                            !ASSUME_VAL(has_components)) {
+                        if (const bool hass = layer.registry.all_of<transform, point_light>(entity);
+                            !ASSUME_VAL(hass)) {
                             continue;
                         }
 
-                        const auto& tf_component = layer.registry.get<transform_component>(entity);
-                        const glm::mat4 transform = camera_state.projection * camera_state.view
-                                                    * glm::translate(glm::mat4(1.0f), tf_component.tf.tr);
+                        const auto& tf = layer.registry.get<transform>(entity);
+                        const glm::mat4 transform =
+                            camera_frame.projection * camera_frame.view * glm::translate(glm::mat4(1.0f), tf.tr);
                         set_transform(bound_sp, glm::value_ptr(transform));
 
-                        const auto& pl_component = layer.registry.get<point_light_component>(entity);
-                        const glm::vec3& color = pl_component.ambient;
+                        const auto& pl = layer.registry.get<point_light>(entity);
+                        const glm::vec3& color = pl.ambient;
                         set_light_color(bound_sp, color.r, color.g, color.b);
 
                         gfx::draw draw{ bound_sp, bound_va };
@@ -364,15 +355,13 @@ struct VNT {
 };
 
 template <std::size_t vertices_extent, std::size_t indices_extent>
-vertex_component create_vertex_component(
-    std::span<const VNT, vertices_extent> vnts,
-    std::span<const std::uint32_t, indices_extent> indices
-) {
+vertex
+    create_vertex(std::span<const VNT, vertices_extent> vnts, std::span<const std::uint32_t, indices_extent> indices) {
     gfx::vertex_array_builder va_builder;
     va_builder.attributes_from<VNT>();
     auto vb = va_builder.buffer<gfx::buffer_type::array, gfx::buffer_usage::static_draw>(vnts);
     auto eb = va_builder.buffer<gfx::buffer_type::element_array, gfx::buffer_usage::static_draw>(indices);
-    return vertex_component{
+    return vertex{
         .va = std::move(va_builder).submit(),
         .draw{ [vb = std::move(vb), eb = std::move(eb)](gfx::draw& draw) { draw.elements(eb); } },
     };
@@ -397,7 +386,6 @@ struct player_entity_state {
 } // namespace sl::game
 
 namespace game = sl::game;
-namespace gfx = sl::gfx;
 namespace rt = sl::rt;
 
 #pragma GCC diagnostic push
@@ -480,8 +468,8 @@ constexpr std::array point_light_positions{
     glm::vec3{ 0.0f, 0.0f, 10.0f },
 };
 
-constexpr std::array point_light_components{
-    game::point_light_component{
+constexpr std::array point_lights{
+    game::point_light{
         .ambient{ 1.0f, 0.0f, 0.0f },
         .diffuse{ 1.0f, 0.0f, 0.0f },
         .specular{ 1.0f, 0.0f, 0.0f },
@@ -490,7 +478,7 @@ constexpr std::array point_light_components{
         .linear = 0.09f,
         .quadratic = 0.032f,
     },
-    game::point_light_component{
+    game::point_light{
         .ambient{ 0.0f, 1.0f, 0.0f },
         .diffuse{ 0.0f, 1.0f, 0.0f },
         .specular{ 1.0f, 1.0f, 1.0f },
@@ -499,7 +487,7 @@ constexpr std::array point_light_components{
         .linear = 0.09f,
         .quadratic = 0.032f,
     },
-    game::point_light_component{
+    game::point_light{
         .ambient{ 0.0f, 0.0f, 1.0f },
         .diffuse{ 0.0f, 0.0f, 1.0f },
         .specular{ 0.0f, 0.0f, 1.0f },
@@ -510,13 +498,13 @@ constexpr std::array point_light_components{
     },
 };
 
-constexpr game::directional_light_component global_directional_light_component{
+constexpr game::directional_light global_directional_light{
     .ambient{ 0.05f, 0.05f, 0.05f },
     .diffuse{ 0.4f, 0.4f, 0.4f },
     .specular{ 0.5f, 0.5f, 0.5f },
 };
 
-static const game::spot_light_component player_spot_light_component{
+static const game::spot_light player_spot_light{
     .ambient{ 0.0f, 0.0f, 0.0f },
     .diffuse{ 1.0f, 1.0f, 1.0f },
     .specular{ 1.0f, 1.0f, 1.0f },
@@ -535,10 +523,9 @@ int main(int argc, char** argv) {
     const rt::context rt_ctx{ argc, argv };
     const auto root = rt_ctx.path().parent_path();
 
-    game::graphics gfx =
-        *ASSERT_VAL(game::graphics::initialize("05_gfx_system", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
-    game::graphics_system gfx_system;
-    game::input_system input_system{ *gfx.window };
+    auto wctx =
+        *ASSERT_VAL(game::window_context::initialize("05_gfx_system", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+    game::input_system input_system{ *wctx.window };
     rt::time time;
 
     game::layer layer{
@@ -562,12 +549,12 @@ int main(int argc, char** argv) {
 
     const auto object_shader_id = check(layer.storage.string.emplace("object.shader"_hsv));
     check( //
-        layer.storage.shader.emplace(object_shader_id, [&root] { return game::create_object_shader_component(root); })
+        layer.storage.shader.emplace(object_shader_id, [&root] { return game::create_object_shader(root); })
     );
 
     const auto source_shader_id = check(layer.storage.string.emplace("source.shader"_hsv));
     check( //
-        layer.storage.shader.emplace(source_shader_id, [&root] { return game::create_source_shader_component(root); })
+        layer.storage.shader.emplace(source_shader_id, [&root] { return game::create_source_shader(root); })
     );
 
     const auto cube_vertex_id = check(layer.storage.string.emplace("cube.vertex"_hsv));
@@ -575,16 +562,16 @@ int main(int argc, char** argv) {
     const auto cube_texture_specular_id = check(layer.storage.string.emplace("cube.texture.specular"_hsv));
     const auto cube_material_id = check(layer.storage.string.emplace("cube.material"_hsv));
     check(layer.storage.vertex.emplace(cube_vertex_id, [] {
-        return game::create_vertex_component(std::span{ cube_vertices }, std::span{ cube_indices });
+        return game::create_vertex(std::span{ cube_vertices }, std::span{ cube_indices });
     }));
     const auto cube_texture_diffuse = check(layer.storage.texture.emplace(cube_texture_diffuse_id, [&root] {
-        return game::create_texture_component(root / "textures/03_lightmap_diffuse.png");
+        return game::create_texture(root / "textures/03_lightmap_diffuse.png");
     }));
     const auto cube_texture_specular = check(layer.storage.texture.emplace(cube_texture_specular_id, [&root] {
-        return game::create_texture_component(root / "textures/03_lightmap_specular.png");
+        return game::create_texture(root / "textures/03_lightmap_specular.png");
     }));
     check(layer.storage.material.emplace(cube_material_id, [&cube_texture_diffuse, &cube_texture_specular] {
-        return game::material_component{
+        return game::material{
             .diffuse = cube_texture_diffuse,
             .specular = cube_texture_specular,
             .shininess = 128.0f * 0.6f,
@@ -596,15 +583,15 @@ int main(int argc, char** argv) {
             auto [i, p] = ip;
             const float angle = 20.0f * (static_cast<float>(i));
             const entt::entity entity = layer.registry.create();
-            layer.registry.emplace<game::shader_component<game::layer>::id>(entity, object_shader_id);
-            layer.registry.emplace<game::vertex_component::id>(entity, cube_vertex_id);
-            layer.registry.emplace<game::material_component::id>(entity, cube_material_id);
-            layer.registry.emplace<game::transform_component>(
+            layer.registry.emplace<game::shader<game::layer>::id>(entity, object_shader_id);
+            layer.registry.emplace<game::vertex::id>(entity, cube_vertex_id);
+            layer.registry.emplace<game::material::id>(entity, cube_material_id);
+            layer.registry.emplace<game::transform>(
                 entity,
-                game::transform_component{ .tf{
+                game::transform{
                     .tr = p,
-                    .rot = glm::angleAxis(glm::radians(angle), gfx_system.world.up()),
-                } }
+                    .rot = glm::angleAxis(glm::radians(angle), layer.world.up()),
+                }
             );
             return entity;
         })
@@ -614,15 +601,13 @@ int main(int argc, char** argv) {
     } };
 
     const auto point_light_entities = //
-        ranges::views::zip(point_light_positions, point_light_components) | ranges::views::transform([&](auto pl) {
+        ranges::views::zip(point_light_positions, point_lights) | ranges::views::transform([&](auto pl) {
             auto [p, l] = pl;
             const entt::entity entity = layer.registry.create();
-            layer.registry.emplace<game::shader_component<game::layer>::id>(entity, source_shader_id);
-            layer.registry.emplace<game::vertex_component::id>(entity, cube_vertex_id);
-            layer.registry.emplace<game::point_light_component>(entity, l);
-            layer.registry.emplace<game::transform_component>(
-                entity, game::transform_component{ .tf{ .tr = p, .rot{} } }
-            );
+            layer.registry.emplace<game::shader<game::layer>::id>(entity, source_shader_id);
+            layer.registry.emplace<game::vertex::id>(entity, cube_vertex_id);
+            layer.registry.emplace<game::point_light>(entity, l);
+            layer.registry.emplace<game::transform>(entity, game::transform{ .tr = p, .rot{} });
             return entity;
         })
         | ranges::to<std::vector>();
@@ -633,12 +618,10 @@ int main(int argc, char** argv) {
     const entt::entity global_entity = [&] {
         const entt::entity entity = layer.registry.create();
         layer.registry.emplace<game::global_entity_state>(entity);
-        layer.registry.emplace<game::directional_light_component>(entity, global_directional_light_component);
-        auto rot = glm::rotation(gfx_system.world.forward(), glm::normalize(glm::vec3{ -0.2f, -1.0f, -0.3f }));
-        layer.registry.emplace<game::transform_component>(
-            entity, game::transform_component{ .tf{ .tr{}, .rot{ rot } } }
-        );
-        layer.registry.emplace<game::input_component<game::layer>>(
+        layer.registry.emplace<game::directional_light>(entity, global_directional_light);
+        auto rot = glm::rotation(layer.world.forward(), glm::normalize(glm::vec3{ -0.2f, -1.0f, -0.3f }));
+        layer.registry.emplace<game::transform>(entity, game::transform{ .tr{}, .rot{ rot } });
+        layer.registry.emplace<game::input<game::layer>>(
             entity,
             [](game::layer& layer, const game::input_events& input_events, entt::entity entity) {
                 using action = game::keyboard_input_event::action_type;
@@ -664,23 +647,23 @@ int main(int argc, char** argv) {
     const entt::entity player_entity = [&] {
         const entt::entity entity = layer.registry.create();
         layer.registry.emplace<game::player_entity_state>(entity);
-        layer.registry.emplace<game::spot_light_component>(entity, player_spot_light_component);
-        layer.registry.emplace<game::transform_component>(
+        layer.registry.emplace<game::spot_light>(entity, player_spot_light);
+        layer.registry.emplace<game::transform>(
             entity,
-            gfx::transform{
+            game::transform{
                 .tr = glm::vec3{ 0.0f, 0.0f, 3.0f },
-                .rot = glm::angleAxis(glm::radians(-180.0f), gfx_system.world.up()),
+                .rot = glm::angleAxis(glm::radians(-180.0f), layer.world.up()),
             }
         );
-        layer.registry.emplace<game::camera_component>(
+        layer.registry.emplace<game::camera>(
             entity,
-            gfx::perspective_projection{
+            game::perspective_projection{
                 .fov = glm::radians(45.0f),
                 .near = 0.1f,
                 .far = 100.0f,
             }
         );
-        layer.registry.emplace<game::input_component<game::layer>>(
+        layer.registry.emplace<game::input<game::layer>>(
             entity,
             [](game::layer& layer, const game::input_events& input_events, entt::entity entity) {
                 using action = game::keyboard_input_event::action_type;
@@ -733,17 +716,16 @@ int main(int argc, char** argv) {
                 }
             }
         );
-        layer.registry.emplace<game::update_component<game::layer>>(
+        layer.registry.emplace<game::update<game::layer>>(
             entity,
-            [](game::layer& layer, const gfx::basis& world, const rt::time_point& time_point, entt::entity entity) {
-                if (const bool has_components =
-                        layer.registry.all_of<game::player_entity_state, game::transform_component>(entity);
-                    !ASSUME_VAL(has_components)) {
+            [](game::layer& layer, const rt::time_point& time_point, entt::entity entity) {
+                if (const bool hass = layer.registry.all_of<game::player_entity_state, game::transform>(entity);
+                    !ASSUME_VAL(hass)) {
                     return;
                 }
 
                 auto& state = layer.registry.get<game::player_entity_state>(entity);
-                auto& tf = layer.registry.get<game::transform_component>(entity).tf;
+                auto& tf = layer.registry.get<game::transform>(entity);
 
                 if (const sl::meta::defer consume{ [&state] { state.cursor_prev.reset(); } };
                     state.cursor_prev.has_value() && state.is_rotating.get()) {
@@ -753,11 +735,11 @@ int main(int argc, char** argv) {
                     const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
                     const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
 
-                    const glm::quat rot_yaw = glm::angleAxis(yaw, world.y);
+                    const glm::quat rot_yaw = glm::angleAxis(yaw, layer.world.y);
                     tf.rotate(rot_yaw);
 
-                    const glm::vec3 camera_forward = tf.rot * world.forward();
-                    const glm::vec3 camera_right = glm::cross(camera_forward, world.up());
+                    const glm::vec3 camera_forward = tf.rot * layer.world.forward();
+                    const glm::vec3 camera_right = glm::cross(camera_forward, layer.world.up());
                     const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
                     tf.rotate(rot_pitch);
                 }
@@ -765,7 +747,7 @@ int main(int argc, char** argv) {
                 {
                     constexpr float acc = 5.0f;
                     const float speed = acc * time_point.delta_sec().count();
-                    const auto new_tr = [&state, &world] {
+                    const auto new_tr = [&state, &world = layer.world] {
                         constexpr auto sub = [](bool a, bool b) {
                             return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
                         };
@@ -782,13 +764,13 @@ int main(int argc, char** argv) {
     }();
     const sl::meta::defer destroy_player_entity{ [&] { layer.registry.destroy(player_entity); } };
 
-    while (!gfx.current_window.should_close()) {
+    while (!wctx.current_window.should_close()) {
         // input
-        gfx.context->poll_events();
-        gfx.state->frame_buffer_size.then([&cw = gfx.current_window](glm::ivec2 frame_buffer_size) {
+        wctx.context->poll_events();
+        wctx.state->frame_buffer_size.then([&cw = wctx.current_window](glm::ivec2 frame_buffer_size) {
             cw.viewport(glm::ivec2{}, frame_buffer_size);
         });
-        gfx.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
+        wctx.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
             ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
         });
         input_system(layer);
@@ -796,42 +778,41 @@ int main(int argc, char** argv) {
         // update window
         layer.registry
             .get<game::global_entity_state>(global_entity) //
-            .should_close.then([&](bool should_close) { gfx.current_window.set_should_close(should_close); });
+            .should_close.then([&](bool should_close) { wctx.current_window.set_should_close(should_close); });
 
         layer.registry
             .get<game::player_entity_state>(player_entity) //
             .is_rotating.then([&](bool is_rotating) {
-                gfx.current_window.set_input_mode(GLFW_CURSOR, is_rotating ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+                wctx.current_window.set_input_mode(
+                    GLFW_CURSOR, is_rotating ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL
+                );
             });
 
         // update
         const rt::time_point time_point = time.calculate();
-        update_system(layer, gfx_system.world, time_point);
+        game::update_system(layer, time_point);
 
         // render
-        const auto gfx_frame = gfx.new_frame();
-        gfx_system(layer, gfx_frame, *gfx.state);
+        const auto window_frame = wctx.new_frame();
+        game::graphics_system(layer, window_frame);
 
         // overlay
-        auto imgui_frame = gfx.imgui.new_frame(); // TODO: require gfx_frame here too
+        auto imgui_frame = wctx.imgui.new_frame(); // TODO: require gfx_frame here too
         if (const auto imgui_window = imgui_frame.begin("debug")) {
             // TODO: maybe use actual angles against the world basis
-            auto& directional_light_rot = layer.registry.get<game::transform_component>(global_entity).tf.rot;
+            auto& directional_light_rot = layer.registry.get<game::transform>(global_entity).rot;
             ImGui::SliderFloat4("directional_light rot", glm::value_ptr(directional_light_rot), -1.0f, 1.0f);
             directional_light_rot = glm::normalize(directional_light_rot);
 
-            auto& directional_light = layer.registry.get<game::directional_light_component>(global_entity);
+            auto& directional_light = layer.registry.get<game::directional_light>(global_entity);
             ImGui::ColorEdit3("directional_light ambient", glm::value_ptr(directional_light.ambient));
             ImGui::ColorEdit3("directional_light diffuse", glm::value_ptr(directional_light.diffuse));
             ImGui::ColorEdit3("directional_light specular", glm::value_ptr(directional_light.specular));
 
             ImGui::Spacing();
-            layer.storage.material.lookup(cube_material_id)
-                .map([](sl::meta::persistent<game::material_component> material) {
-                    ImGui::SliderFloat(
-                        "shininess", &material->shininess, 2.0f, 256, "%.0f", ImGuiSliderFlags_Logarithmic
-                    );
-                });
+            layer.storage.material.lookup(cube_material_id).map([](sl::meta::persistent<game::material> material) {
+                ImGui::SliderFloat("shininess", &material->shininess, 2.0f, 256, "%.0f", ImGuiSliderFlags_Logarithmic);
+            });
         }
     }
 

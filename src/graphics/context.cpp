@@ -52,12 +52,11 @@ window_frame::window_frame(window_context& ctx)
     ctx_.current_window.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-camera_frame window_frame::for_camera(const camera& camera, const transform& tf) const {
+camera_frame window_frame::for_camera(const basis& world, const camera& camera, const transform& tf) const {
     return camera_frame{
-        .world = ctx_.world,
         .position = tf.tr,
         .projection = camera.calculate_projection(ctx_.state->frame_buffer_size.get()),
-        .view = ctx_.world.view(tf),
+        .view = world.view(tf),
     };
 }
 

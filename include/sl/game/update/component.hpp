@@ -4,17 +4,16 @@
 
 #pragma once
 
-#include "sl/game/graphics/component/basis.hpp"
 #include "sl/game/layer.hpp"
 
 namespace sl::game {
 
-template <typename Layer>
-struct update {
-    using handler_type = component_callback<void(Layer&, const basis&, const rt::time_point&, entt::entity)>;
-    handler_type handler;
+struct node {
+    entt::entity parent = entt::null;
+    std::deque<entt::entity> children{}; // amortized insert/remove/iter
 };
 
-// TODO: hierarchical updates
+template <typename Layer>
+using update = component_callback<void(Layer&, const rt::time_point&, entt::entity)>;
 
 } // namespace sl::game

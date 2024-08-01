@@ -10,7 +10,7 @@
 namespace sl::game {
 
 template <typename Layer>
-struct input_component {
+struct input {
     using handler_type = component_callback<void(Layer&, const input_events&, entt::entity)>;
     handler_type handler;
 };

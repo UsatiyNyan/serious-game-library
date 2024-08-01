@@ -39,13 +39,9 @@ public:
     gfx::current_window current_window;
     std::unique_ptr<window_state> state;
     gfx::imgui_context imgui;
-
-    // TODO: is there a better place for that?
-    static constexpr basis world;
 };
 
 struct camera_frame {
-    basis world;
     glm::vec3 position;
     glm::mat4 projection;
     glm::mat4 view;
@@ -55,7 +51,7 @@ class window_frame : public meta::finalizer<window_frame> {
 public:
     explicit window_frame(window_context& ctx);
 
-    [[nodiscard]] camera_frame for_camera(const camera& camera, const transform& tf) const;
+    [[nodiscard]] camera_frame for_camera(const basis& world, const camera& camera, const transform& tf) const;
 
 private:
     window_context& ctx_;

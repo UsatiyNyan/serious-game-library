@@ -42,7 +42,7 @@ public:
 
     template <InputLayerRequirements Layer>
     void operator()(Layer& layer) {
-        auto entities = layer.registry.template view<input_component<Layer>>();
+        auto entities = layer.registry.template view<input<Layer>>();
         for (auto&& [entity, input] : entities.each()) {
             input.handler(layer, queue_.events(), entity);
         }
