@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <sl/meta/conn/dirty.hpp>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
@@ -22,6 +24,11 @@ struct transform {
         }
         rot = glm::normalize(rot);
     }
+    transform& combine(const transform& other) {
+        translate(rot * other.tr);
+        rotate(other.rot);
+        return *this;
+    }
 };
 
 inline transform translate(transform tf, const glm::vec3& tr) {
@@ -36,5 +43,13 @@ inline transform normalize(transform tf) {
     tf.normalize();
     return tf;
 }
+inline transform combine(transform a, const transform& b) {
+    a.combine(b);
+    return a;
+}
+
+// for node updates use this one
+// local_transform_system will check if local_tranform is changed and apply transforms down the tree
+using local_transform = meta::dirty<transform>;
 
 } // namespace sl::game

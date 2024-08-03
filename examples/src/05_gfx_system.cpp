@@ -27,16 +27,6 @@ using sl::meta::operator""_hsv;
 
 namespace sl::game {
 
-struct material {
-    struct id {
-        meta::unique_string id;
-    };
-
-    meta::persistent<texture> diffuse;
-    meta::persistent<texture> specular;
-    float shininess;
-};
-
 struct directional_light {
     glm::vec3 ambient;
     glm::vec3 diffuse;
@@ -518,33 +508,33 @@ int main(int argc, char** argv) {
             .value();
 
     engine::layer layer = e_ctx.create_root_layer();
-    const auto object_shader_id = layer.storage.emplace_unique_string("object.shader"_hsv);
-    (void)layer.storage.emplace_unique_shader(object_shader_id, game::create_object_shader(e_ctx.root_path));
+    const auto object_shader_id = *ASSERT_VAL(layer.storage.string.emplace("object.shader"_hsv));
+    ASSERT(layer.storage.shader.insert(object_shader_id, game::create_object_shader(e_ctx.root_path)));
 
-    const auto source_shader_id = layer.storage.emplace_unique_string("source.shader"_hsv);
-    (void)layer.storage.emplace_unique_shader(source_shader_id, game::create_source_shader(e_ctx.root_path));
+    const auto source_shader_id = *ASSERT_VAL(layer.storage.string.emplace("source.shader"_hsv));
+    ASSERT(layer.storage.shader.insert(source_shader_id, game::create_source_shader(e_ctx.root_path)));
 
-    const auto cube_vertex_id = layer.storage.emplace_unique_string("cube.vertex"_hsv);
-    const auto cube_texture_diffuse_id = layer.storage.emplace_unique_string("cube.texture.diffuse"_hsv);
-    const auto cube_texture_specular_id = layer.storage.emplace_unique_string("cube.texture.specular"_hsv);
-    const auto cube_material_id = layer.storage.emplace_unique_string("cube.material"_hsv);
-    (void)layer.storage.emplace_unique_vertex(
+    const auto cube_vertex_id = *ASSERT_VAL(layer.storage.string.emplace("cube.vertex"_hsv));
+    const auto cube_texture_diffuse_id = *ASSERT_VAL(layer.storage.string.emplace("cube.texture.diffuse"_hsv));
+    const auto cube_texture_specular_id = *ASSERT_VAL(layer.storage.string.emplace("cube.texture.specular"_hsv));
+    const auto cube_material_id = *ASSERT_VAL(layer.storage.string.emplace("cube.material"_hsv));
+    ASSERT(layer.storage.vertex.insert(
         cube_vertex_id, game::create_vertex(std::span{ cube_vertices }, std::span{ cube_indices })
-    );
-    const auto cube_texture_diffuse = layer.storage.emplace_unique_texture(
+    ));
+    const auto cube_texture_diffuse = *ASSERT_VAL(layer.storage.texture.insert(
         cube_texture_diffuse_id, game::create_texture(e_ctx.root_path / "textures/03_lightmap_diffuse.png")
-    );
-    const auto cube_texture_specular = layer.storage.emplace_unique_texture(
+    ));
+    const auto cube_texture_specular = *ASSERT_VAL(layer.storage.texture.insert(
         cube_texture_specular_id, game::create_texture(e_ctx.root_path / "textures/03_lightmap_specular.png")
-    );
-    (void)layer.storage.emplace_unique_material(
+    ));
+    ASSERT(layer.storage.material.insert(
         cube_material_id,
         game::material{
             .diffuse = cube_texture_diffuse,
             .specular = cube_texture_specular,
             .shininess = 128.0f * 0.6f,
         }
-    );
+    ));
 
     const auto object_entities = //
         ranges::views::enumerate(cube_positions) | ranges::views::transform([&](auto ip) {
@@ -608,6 +598,15 @@ int main(int argc, char** argv) {
                 }
             }
         );
+        layer.registry.emplace<game::update<engine::layer>>(
+            entity,
+            [&](engine::layer& layer, const rt::time_point&, entt::entity entity) {
+                auto& state = *ASSERT_VAL((layer.registry.try_get<game::global_entity_state>(entity)));
+                state.should_close.release().map([&cw = e_ctx.w_ctx.current_window](bool should_close) {
+                    cw.set_should_close(should_close);
+                });
+            }
+        );
         return entity;
     }();
     const sl::meta::defer destroy_global_entity{ [&] { layer.registry.destroy(global_entity); } };
@@ -666,7 +665,7 @@ int main(int argc, char** argv) {
                     [&state](const game::mouse_button_input_event& mouse_button) {
                         using button = game::mouse_button_input_event::button_type;
                         if (mouse_button.button == button::RIGHT) {
-                            state.is_rotating.set(
+                            state.is_rotating.set_if_ne(
                                 mouse_button.action == action::PRESS || mouse_button.action == action::REPEAT
                             );
                         }
@@ -686,7 +685,7 @@ int main(int argc, char** argv) {
         );
         layer.registry.emplace<game::update<engine::layer>>(
             entity,
-            [](engine::layer& layer, const rt::time_point& time_point, entt::entity entity) {
+            [&e_ctx](engine::layer& layer, const rt::time_point& time_point, entt::entity entity) {
                 if (const bool hass = layer.registry.all_of<game::player_entity_state, game::transform>(entity);
                     !ASSUME_VAL(hass)) {
                     return;
@@ -725,6 +724,12 @@ int main(int argc, char** argv) {
                     }();
                     tf.translate(speed * (tf.rot * new_tr));
                 }
+
+                state.is_rotating.release().map([&e_ctx](bool is_rotating) {
+                    e_ctx.w_ctx.current_window.set_input_mode(
+                        GLFW_CURSOR, is_rotating ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL
+                    );
+                });
             }
         );
 
@@ -735,26 +740,15 @@ int main(int argc, char** argv) {
     while (!e_ctx.w_ctx.current_window.should_close()) {
         // input
         e_ctx.w_ctx.context->poll_events();
-        e_ctx.w_ctx.state->frame_buffer_size.then([&cw = e_ctx.w_ctx.current_window](glm::ivec2 frame_buffer_size) {
-            cw.viewport(glm::ivec2{}, frame_buffer_size);
-        });
-        e_ctx.w_ctx.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
+        e_ctx.w_ctx.state->frame_buffer_size.release().map( //
+            [&cw = e_ctx.w_ctx.current_window](const glm::ivec2& frame_buffer_size) {
+                cw.viewport(glm::ivec2{}, frame_buffer_size);
+            }
+        );
+        e_ctx.w_ctx.state->window_content_scale.release().map([](const glm::fvec2& window_content_scale) {
             ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
         });
         e_ctx.in_sys(layer);
-
-        // update window
-        layer.registry
-            .get<game::global_entity_state>(global_entity) //
-            .should_close.then([&](bool should_close) { e_ctx.w_ctx.current_window.set_should_close(should_close); });
-
-        layer.registry
-            .get<game::player_entity_state>(player_entity) //
-            .is_rotating.then([&](bool is_rotating) {
-                e_ctx.w_ctx.current_window.set_input_mode(
-                    GLFW_CURSOR, is_rotating ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL
-                );
-            });
 
         // update
         const rt::time_point time_point = e_ctx.time.calculate();

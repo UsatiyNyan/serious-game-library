@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "sl/game/layer.hpp"
 #include "sl/game/update/component.hpp"
 
 #include <libassert/assert.hpp>
@@ -19,13 +20,10 @@ void tree_update_top_down(Layer& layer, update<Layer> update, rt::time_point tim
         const entt::entity node_entity = queue.front();
         queue.pop_front();
 
-        update(layer, node_entity, time_point);
+        const node& node_component = *ASSERT_VAL(layer.registry.template try_get<node>(node_entity));
+        queue.insert(queue.end(), node_component.children.begin(), node_component.children.end());
 
-        const node* maybe_nc = layer.registry.template try_get<node>(node_entity);
-        if (maybe_nc != nullptr) {
-            const node& nc = *maybe_nc;
-            queue.insert(queue.end(), nc.children.begin(), nc.children.end());
-        }
+        update(layer, node_entity, node_component, time_point);
     }
 }
 
@@ -39,11 +37,8 @@ void tree_update_bottom_up(Layer& layer, update<Layer> update, rt::time_point ti
         tmp.pop_back();
         accum.push_back(node_entity);
 
-        const node* maybe_nc = layer.registry.template try_get<node>(node_entity);
-        if (maybe_nc != nullptr) {
-            const node& nc = *maybe_nc;
-            tmp.insert(tmp.end(), nc.children.begin(), nc.children.end());
-        }
+        const node& node_component = *ASSERT_VAL(layer.registry.template try_get<node>(node_entity));
+        tmp.insert(tmp.end(), node_component.children.begin(), node_component.children.end());
     }
 
     for (auto r_it = accum.rbegin(); r_it != accum.rend(); ++r_it) {
@@ -73,10 +68,7 @@ void tree_update_system(tree_update_order order, Layer& layer, update<Layer> upd
     }
 }
 
-template <typename Layer>
-concept UpdateLayerRequirements = GameLayerRequirements<Layer>;
-
-template <UpdateLayerRequirements Layer>
+template <GameLayerRequirements Layer>
 void update_system(Layer& layer, rt::time_point time_point) {
     auto entities = layer.registry.template view<update<Layer>>();
     for (auto&& [entity, update] : entities.each()) {

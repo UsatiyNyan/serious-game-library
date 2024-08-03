@@ -16,19 +16,6 @@ namespace sl::game::engine {
 struct layer;
 
 struct storage {
-    // will ASSERT if not unique
-    [[nodiscard]] meta::unique_string emplace_unique_string(meta::hash_string_view hsv);
-    // will ASSERT if not unique
-    [[nodiscard]] meta::persistent<shader<layer>>
-        emplace_unique_shader(meta::unique_string id, game::shader<layer> value);
-    // will ASSERT if not unique
-    [[nodiscard]] meta::persistent<vertex> emplace_unique_vertex(meta::unique_string id, game::vertex value);
-    // will ASSERT if not unique
-    [[nodiscard]] meta::persistent<texture> emplace_unique_texture(meta::unique_string id, game::texture value);
-    // will ASSERT if not unique
-    [[nodiscard]] meta::persistent<material> emplace_unique_material(meta::unique_string id, game::material value);
-
-public:
     meta::unique_string_storage string;
     game::storage<shader<layer>> shader;
     game::storage<vertex> vertex;

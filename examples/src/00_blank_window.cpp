@@ -20,7 +20,9 @@ int main() {
     while (!gfx.current_window.should_close()) {
         // input
         gfx.context->poll_events();
-        gfx.state->frame_buffer_size.then([&cw = gfx.current_window](glm::ivec2 x) { cw.viewport(glm::ivec2{}, x); });
+        gfx.state->frame_buffer_size.release().map([&cw = gfx.current_window](const glm::ivec2& x) {
+            cw.viewport(glm::ivec2{}, x);
+        });
 
         if (gfx.current_window.is_key_pressed(GLFW_KEY_ESCAPE)) {
             gfx.current_window.set_should_close(true);

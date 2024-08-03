@@ -13,7 +13,7 @@ struct node {
     std::deque<entt::entity> children{}; // amortized insert/remove/iter
 };
 
-template <typename Layer>
+template <GameLayerRequirements Layer>
 using update = component_callback<void(Layer&, entt::entity, rt::time_point)>;
 
 } // namespace sl::game
