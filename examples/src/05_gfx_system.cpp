@@ -600,7 +600,7 @@ int main(int argc, char** argv) {
         );
         layer.registry.emplace<game::update<engine::layer>>(
             entity,
-            [&](engine::layer& layer, const rt::time_point&, entt::entity entity) {
+            [&](engine::layer& layer, entt::entity entity, rt::time_point) {
                 auto& state = *ASSERT_VAL((layer.registry.try_get<game::global_entity_state>(entity)));
                 state.should_close.release().map([&cw = e_ctx.w_ctx.current_window](bool should_close) {
                     cw.set_should_close(should_close);
@@ -685,7 +685,7 @@ int main(int argc, char** argv) {
         );
         layer.registry.emplace<game::update<engine::layer>>(
             entity,
-            [&e_ctx](engine::layer& layer, const rt::time_point& time_point, entt::entity entity) {
+            [&e_ctx](engine::layer& layer, entt::entity entity, rt::time_point time_point) {
                 if (const bool hass = layer.registry.all_of<game::player_entity_state, game::transform>(entity);
                     !ASSUME_VAL(hass)) {
                     return;

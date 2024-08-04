@@ -11,6 +11,10 @@ cpmaddpackage(
         NAME serious-runtime-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-runtime-library.git"
         GIT_TAG main)
+cpmaddpackage(
+        NAME serious-execution-library
+        GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-execution-library.git"
+        GIT_TAG main)
 
 cpmaddpackage(
         NAME fmt
@@ -31,23 +35,18 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/spdlog.cmake")
 
 sl_target_link_system_libraries(${PROJECT_NAME}
         PUBLIC
+        # serious libraries
+        sl::meta
+        sl::gfx
+        sl::rt
+        sl::exec
+
         # fmt/log
         fmt::fmt
         spdlog::spdlog
 
-        # fp components
-        serious-meta-library
-
         # utils
         libassert::assert
         Boost::container
-
-        # graphics
-        serious-graphics-library
-
-        # entt
         EnTT::EnTT
-
-        # assets
-        serious-runtime-library
 )

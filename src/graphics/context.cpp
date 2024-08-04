@@ -55,7 +55,7 @@ window_frame::window_frame(window_context& ctx)
 camera_frame window_frame::for_camera(const basis& world, const camera& camera, const transform& tf) const {
     return camera_frame{
         .position = tf.tr,
-        .projection = camera.calculate_projection(ctx_.state->frame_buffer_size.get()),
+        .projection = camera.calculate_projection(*ASSERT_VAL(ctx_.state->frame_buffer_size.get())),
         .view = world.view(tf),
     };
 }
