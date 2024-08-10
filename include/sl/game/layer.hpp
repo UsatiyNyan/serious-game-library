@@ -21,7 +21,7 @@ template <typename T>
 using array_storage = meta::persistent_array_storage<meta::unique_string, T>;
 
 template <typename Signature, typename Capacity = fu2::capacity_default>
-using component_callback = fu2::function_base<
+using function = fu2::function_base<
     /*IsOwning=*/true,
     /*IsCopyable=*/false,
     /*Capacity=*/Capacity,

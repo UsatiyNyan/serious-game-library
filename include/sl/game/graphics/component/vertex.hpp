@@ -45,7 +45,7 @@ struct vertex {
     gfx::vertex_array va;
 
     // closure for vb/eb
-    using draw_type = component_callback<void(gfx::draw&)>;
+    using draw_type = function<void(gfx::draw&)>;
     draw_type draw;
 };
 
@@ -57,9 +57,8 @@ struct shader {
 
     gfx::shader_program sp;
 
-    using draw_type =
-        component_callback<void(const gfx::bound_vertex_array&, vertex::draw_type&, std::span<const entt::entity>)>;
-    component_callback<draw_type(Layer&, const camera_frame&, const gfx::bound_shader_program&)> setup;
+    using draw_type = function<void(const gfx::bound_vertex_array&, vertex::draw_type&, std::span<const entt::entity>)>;
+    function<draw_type(Layer&, const camera_frame&, const gfx::bound_shader_program&)> setup;
 };
 
 } // namespace sl::game

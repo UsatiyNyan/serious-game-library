@@ -14,6 +14,6 @@ struct node {
 };
 
 template <GameLayerRequirements Layer>
-using update = component_callback<void(Layer&, entt::entity, rt::time_point)>;
+using update = function<void(Layer&, entt::entity, rt::time_point)>;
 
 } // namespace sl::game
