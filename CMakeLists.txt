@@ -28,6 +28,7 @@ add_library(${PROJECT_NAME} STATIC
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 
 add_subdirectory(dependencies)
+add_subdirectory(assets)
 
 # Tests and examples
 
