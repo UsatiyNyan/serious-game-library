@@ -39,7 +39,9 @@ void local_transform_system(Layer& layer, entt::entity entity, rt::time_point ti
 
 template <GameLayerRequirements Layer>
 void local_transform_system(Layer& layer, rt::time_point time_point) {
-    tree_update_system(tree_update_order::TOP_DOWN, layer, detail::local_transform_system<Layer>, time_point);
+    tree_update_system(
+        tree_update_order::TOP_DOWN, layer, update<Layer>{ detail::local_transform_system<Layer> }, time_point
+    );
 }
 
 } // namespace sl::game

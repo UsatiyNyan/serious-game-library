@@ -23,7 +23,7 @@ void tree_update_top_down(Layer& layer, update<Layer> update, rt::time_point tim
         const node& node_component = *ASSERT_VAL(layer.registry.template try_get<node>(node_entity));
         queue.insert(queue.end(), node_component.children.begin(), node_component.children.end());
 
-        update(layer, node_entity, node_component, time_point);
+        update(layer, node_entity, time_point);
     }
 }
 
