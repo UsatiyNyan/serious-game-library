@@ -16,7 +16,7 @@ namespace sl::game {
 template <typename Layer>
 concept InputLayerRequirements = GameLayerRequirements<Layer>;
 
-class input_system {
+class input_system : meta::immovable {
 public:
     // attach to window
     explicit input_system(gfx::window& window, std::size_t queue_capacity = 128)
@@ -41,7 +41,7 @@ public:
           }) } {}
 
     template <InputLayerRequirements Layer>
-    void operator()(Layer& layer) {
+    void process(Layer& layer) {
         auto entities = layer.registry.template view<input<Layer>>();
         for (auto&& [entity, input] : entities.each()) {
             input.handler(layer, queue_.events(), entity);

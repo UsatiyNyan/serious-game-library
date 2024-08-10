@@ -41,7 +41,7 @@ public:
     std::filesystem::path root_path;
 
     window_context w_ctx;
-    input_system in_sys;
+    std::unique_ptr<input_system> in_sys;
 
     rt::time time{};
 };

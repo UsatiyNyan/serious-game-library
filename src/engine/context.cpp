@@ -12,7 +12,7 @@ namespace sl::game::engine {
 context context::initialize(window_context&& w_ctx, int argc, char** argv) {
     rt::context rt_ctx{ argc, argv };
     auto root_path = rt_ctx.path().parent_path();
-    input_system in_sys{ *w_ctx.window };
+    auto in_sys = std::make_unique<input_system>(*w_ctx.window);
     return context{
         .rt_ctx = std::move(rt_ctx),
         .root_path = root_path,

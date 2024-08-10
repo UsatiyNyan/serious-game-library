@@ -588,7 +588,8 @@ int main(int argc, char** argv) {
                     [&state](const game::keyboard_input_event& keyboard) {
                         using key = game::keyboard_input_event::key_type;
                         if (keyboard.key == key::ESCAPE) {
-                            state.should_close.set(state.should_close.get() || keyboard.action == action::PRESS);
+                            const bool prev = state.should_close.get().value_or(false);
+                            state.should_close.set_if_ne(prev || keyboard.action == action::PRESS);
                         }
                     },
                     [](const auto&) {},
@@ -695,7 +696,7 @@ int main(int argc, char** argv) {
                 auto& tf = layer.registry.get<game::transform>(entity);
 
                 if (const sl::meta::defer consume{ [&state] { state.cursor_prev.reset(); } };
-                    state.cursor_prev.has_value() && state.is_rotating.get()) {
+                    state.cursor_prev.has_value() && state.is_rotating.get().value_or(false)) {
                     const auto cursor_offset = state.cursor_curr - state.cursor_prev.value();
 
                     constexpr float sensitivity = -glm::radians(0.2f);
@@ -748,7 +749,7 @@ int main(int argc, char** argv) {
         e_ctx.w_ctx.state->window_content_scale.release().map([](const glm::fvec2& window_content_scale) {
             ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
         });
-        e_ctx.in_sys(layer);
+        e_ctx.in_sys->process(layer);
 
         // update
         const rt::time_point time_point = e_ctx.time.calculate();
