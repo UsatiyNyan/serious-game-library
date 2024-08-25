@@ -20,8 +20,11 @@ void tree_update_top_down(Layer& layer, update<Layer> update, rt::time_point tim
         const entt::entity node_entity = queue.front();
         queue.pop_front();
 
-        const node& node_component = *ASSERT_VAL(layer.registry.template try_get<node>(node_entity));
-        queue.insert(queue.end(), node_component.children.begin(), node_component.children.end());
+        if (const node* maybe_node_component = layer.registry.template try_get<node>(node_entity);
+            maybe_node_component != nullptr) {
+            const node& node_component = *maybe_node_component;
+            queue.insert(queue.end(), node_component.children.begin(), node_component.children.end());
+        }
 
         update(layer, node_entity, time_point);
     }
@@ -37,8 +40,11 @@ void tree_update_bottom_up(Layer& layer, update<Layer> update, rt::time_point ti
         tmp.pop_back();
         accum.push_back(node_entity);
 
-        const node& node_component = *ASSERT_VAL(layer.registry.template try_get<node>(node_entity));
-        tmp.insert(tmp.end(), node_component.children.begin(), node_component.children.end());
+        if (const node* maybe_node_component = layer.registry.template try_get<node>(node_entity);
+            maybe_node_component != nullptr) {
+            const node& node_component = *maybe_node_component;
+            tmp.insert(tmp.end(), node_component.children.begin(), node_component.children.end());
+        }
     }
 
     for (auto r_it = accum.rbegin(); r_it != accum.rend(); ++r_it) {
