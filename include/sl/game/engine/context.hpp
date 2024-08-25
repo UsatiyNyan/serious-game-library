@@ -9,6 +9,7 @@
 #include "sl/game/input/system.hpp"
 #include "sl/game/layer.hpp"
 
+#include <sl/exec/st/executor.hpp>
 #include <sl/rt.hpp>
 
 namespace sl::game::engine {
@@ -43,7 +44,9 @@ public:
     window_context w_ctx;
     std::unique_ptr<input_system> in_sys;
 
-    rt::time time{};
+    std::unique_ptr<exec::st::executor> script_exec;
+
+    rt::time time;
 };
 
 } // namespace sl::game::engine

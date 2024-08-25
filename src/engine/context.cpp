@@ -3,6 +3,7 @@
 //
 
 #include "sl/game/engine/context.hpp"
+
 #include <sl/meta/lifetime/lazy_eval.hpp>
 
 #include <libassert/assert.hpp>
@@ -18,6 +19,7 @@ context context::initialize(window_context&& w_ctx, int argc, char** argv) {
         .root_path = root_path,
         .w_ctx = std::move(w_ctx),
         .in_sys = std::move(in_sys),
+        .script_exec = std::make_unique<exec::st::executor>(),
         .time{},
     };
 }
