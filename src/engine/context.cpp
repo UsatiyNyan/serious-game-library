@@ -24,27 +24,4 @@ context context::initialize(window_context&& w_ctx, int argc, char** argv) {
     };
 }
 
-layer context::create_root_layer() {
-    // TODO: configuration
-    constexpr std::size_t default_string_capacity = 1024;
-    constexpr std::size_t default_shader_capacity = 16;
-    constexpr std::size_t default_vertex_capacity = 16;
-    constexpr std::size_t default_texture_capacity = 16;
-    constexpr std::size_t default_material_capacity = 16;
-    entt::registry registry;
-    entt::entity root = registry.create();
-    return layer{
-        .storage{
-            .string{ default_string_capacity },
-            .shader{ default_shader_capacity },
-            .vertex{ default_vertex_capacity },
-            .texture{ default_texture_capacity },
-            .material{ default_material_capacity },
-        },
-        .registry = std::move(registry),
-        .root = root,
-        .world{},
-    };
-}
-
 } // namespace sl::game::engine
