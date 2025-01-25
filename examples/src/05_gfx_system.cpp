@@ -507,7 +507,7 @@ int main(int argc, char** argv) {
             .or_else([] { PANIC("engine context"); })
             .value();
 
-    engine::layer layer = e_ctx.create_root_layer();
+    engine::layer layer{ engine::layer::config{} };
     const auto object_shader_id = *ASSERT_VAL(layer.storage.string.emplace("object.shader"_hsv));
     ASSERT(layer.storage.shader.insert(object_shader_id, game::create_object_shader(e_ctx.root_path)));
 

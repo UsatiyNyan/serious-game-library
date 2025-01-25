@@ -7,7 +7,7 @@
 #include "sl/game/graphics/context.hpp"
 #include "sl/game/input/system.hpp"
 
-#include <sl/exec/st/executor.hpp>
+#include <sl/exec/algo/sched/manual.hpp>
 #include <sl/rt.hpp>
 
 namespace sl::game::engine {
@@ -22,7 +22,7 @@ public:
     window_context w_ctx;
     std::unique_ptr<input_system> in_sys;
 
-    std::unique_ptr<exec::st::executor> script_exec;
+    std::unique_ptr<exec::manual_executor> script_exec;
 
     rt::time time;
 };

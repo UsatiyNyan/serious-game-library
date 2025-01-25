@@ -4,12 +4,15 @@
 
 #pragma once
 
+#include "sl/game/engine/loader.hpp"
 #include "sl/game/graphics/component/vertex.hpp"
 #include "sl/game/layer.hpp"
 
+#include <sl/meta/lifetime/immovable.hpp>
+
 namespace sl::game::engine {
 
-struct layer {
+struct layer : meta::immovable {
     struct config {
         struct storage {
             tl::optional<std::size_t> string_capacity;
@@ -20,8 +23,7 @@ struct layer {
         } storage;
     };
 
-public:
-    static layer create(config cfg);
+    explicit layer(config cfg);
 
 public:
     struct storage_type {
@@ -32,10 +34,17 @@ public:
         game::storage<material> material;
     } storage;
 
-    entt::registry registry;
+    struct loader_type {
+        loader<shader<layer>> shader;
+        loader<vertex> vertex;
+        loader<texture> texture;
+        loader<material> material;
+    } loader;
+
+    entt::registry registry{};
     entt::entity root;
 
-    basis world;
+    basis world{};
 };
 
 } // namespace sl::game::engine
