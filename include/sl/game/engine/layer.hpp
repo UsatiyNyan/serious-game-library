@@ -23,7 +23,7 @@ struct layer : meta::immovable {
         } storage;
     };
 
-    explicit layer(config cfg);
+    layer(exec::executor& executor, config cfg);
 
 public:
     struct storage_type {

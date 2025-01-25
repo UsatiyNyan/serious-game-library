@@ -15,17 +15,17 @@ constexpr std::size_t default_material_capacity = 16;
 
 } // namespace
 
-layer::layer(config cfg)
+layer::layer(exec::executor& executor, config cfg)
     : storage{ .string{ cfg.storage.string_capacity.value_or(default_string_capacity) },
                .shader{ cfg.storage.shader_capacity.value_or(default_shader_capacity) },
                .vertex{ cfg.storage.vertex_capacity.value_or(default_vertex_capacity) },
                .texture{ cfg.storage.texture_capacity.value_or(default_texture_capacity) },
                .material{ cfg.storage.material_capacity.value_or(default_material_capacity) } },
       loader{
-          .shader{ storage.shader },
-          .vertex{ storage.vertex },
-          .texture{ storage.texture },
-          .material{ storage.material },
+          .shader{ executor, storage.shader },
+          .vertex{ executor, storage.vertex },
+          .texture{ executor, storage.texture },
+          .material{ executor, storage.material },
       },
       root{ registry.create() } {}
 
