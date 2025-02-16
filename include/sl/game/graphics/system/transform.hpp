@@ -29,8 +29,8 @@ void local_transform_system(Layer& layer, entt::entity entity, rt::time_point ti
             if (parent == entt::null) { // root
                 return changed_local_tf;
             }
-            const transform* maybe_parent_tf = layer.registry.template try_get<transform>(entity);
-            const transform& parent_tf = *ASSERT_VAL(maybe_parent_tf, "parent has to have transform");
+            const transform* maybe_parent_tf = layer.registry.template try_get<transform>(parent);
+            const transform& parent_tf = *ASSERT_VAL(maybe_parent_tf, "parent has to have transform", entity, parent);
             return combine(parent_tf, changed_local_tf);
         })
         .map([&](transform new_tf) { layer.registry.template emplace_or_replace<transform>(entity, new_tf); });
