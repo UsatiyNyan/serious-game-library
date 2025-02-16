@@ -1,0 +1,196 @@
+//
+// Created by usatiynyan.
+// TODO: require(storage.shader, "shader_id"_hsv);
+// TODO: require(storage.material, assets::material(...));
+//
+
+#pragma once
+
+#include "../common.hpp"
+
+namespace script {
+
+inline exec::async<game::shader<engine::layer>> create_object_shader(const example_context& example_ctx) {
+    const auto& root = example_ctx.asset_path;
+
+    // load_from_file is potentially a blocking
+    const std::array<gfx::shader, 2> shaders{
+        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::vertex, root / "shaders/blinn_phong.vert")),
+        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::fragment, root / "shaders/blinn_phong.frag")),
+    };
+    auto sp = *ASSERT_VAL(gfx::shader_program::build(std::span{ shaders }));
+    auto sp_bind = sp.bind();
+
+    constexpr std::array<std::string_view, 2> material_textures{
+        "u_material.diffuse",
+        "u_material.specular",
+    };
+    sp_bind.initialize_tex_units(std::span{ material_textures });
+
+    auto set_view_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_view_pos"));
+
+    auto set_directional_light_size =
+        *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1ui, "u_directional_light_size"));
+    auto set_point_light_size = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1ui, "u_point_light_size"));
+    auto set_spot_light_size = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1ui, "u_spot_light_size"));
+
+    auto set_material_shininess = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_material.shininess"));
+
+    auto set_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_model", 1, false));
+    auto set_it_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix3fv, "u_it_model", 1, false));
+    auto set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false));
+
+    auto dl_buffer = render::buffer::initialize<render::buffer::directional_light_element>(1);
+    auto pl_buffer = render::buffer::initialize<render::buffer::point_light_element>(16);
+    auto sl_buffer = render::buffer::initialize<render::buffer::spot_light_element>(1);
+
+    co_return game::shader<engine::layer>{
+        .sp{ std::move(sp) },
+        .setup{ [ //
+                    set_view_pos = std::move(set_view_pos),
+                    dl_buffer = std::move(dl_buffer),
+                    set_dl_size = std::move(set_directional_light_size),
+                    pl_buffer = std::move(pl_buffer),
+                    set_pl_size = std::move(set_point_light_size),
+                    sl_buffer = std::move(sl_buffer),
+                    set_sl_size = std::move(set_spot_light_size),
+                    set_material_shininess = std::move(set_material_shininess),
+                    set_model = std::move(set_model),
+                    set_it_model = std::move(set_it_model),
+                    set_transform = std::move(set_transform)](
+                    engine::layer& layer, //
+                    const game::camera_frame& camera_frame,
+                    const gfx::bound_shader_program& bound_sp
+                ) mutable {
+            set_view_pos(bound_sp, camera_frame.position.x, camera_frame.position.y, camera_frame.position.z);
+
+            const std::uint32_t dl_size = render::buffer::fill(layer, dl_buffer);
+            set_dl_size(bound_sp, dl_size);
+
+            const std::uint32_t pl_size = render::buffer::fill(layer, pl_buffer);
+            set_pl_size(bound_sp, pl_size);
+
+            const std::uint32_t sl_size = render::buffer::fill(layer, sl_buffer);
+            set_sl_size(bound_sp, sl_size);
+
+            return [ //
+                       &set_material_shininess,
+                       &set_model,
+                       &set_it_model,
+                       &set_transform,
+                       &layer,
+                       &camera_frame,
+                       &bound_sp,
+                       bound_dl_base = dl_buffer.bind_base(0),
+                       bound_pl_base = pl_buffer.bind_base(1),
+                       bound_sl_base = sl_buffer.bind_base(2)]( //
+                       const gfx::bound_vertex_array& bound_va,
+                       game::vertex::draw_type& vertex_draw,
+                       std::span<const entt::entity> entities
+                   ) {
+                for (const entt::entity entity : entities) {
+                    if (const bool has_components = layer.registry.all_of<game::transform, game::material::id>(entity);
+                        !ASSUME_VAL(has_components)) {
+                        continue;
+                    }
+
+                    const auto& tf = layer.registry.get<game::transform>(entity);
+                    const glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), tf.tr);
+                    const glm::mat4 rotation_matrix = glm::mat4_cast(tf.rot);
+                    // TODO: scale
+                    const glm::mat4 model = translation_matrix * rotation_matrix;
+                    const glm::mat3 it_model = glm::transpose(glm::inverse(model));
+                    const glm::mat4 transform = camera_frame.projection * camera_frame.view * model;
+                    set_model(bound_sp, glm::value_ptr(model));
+                    set_it_model(bound_sp, glm::value_ptr(it_model));
+                    set_transform(bound_sp, glm::value_ptr(transform));
+
+                    const auto& mtl_id = layer.registry.get<game::material::id>(entity);
+                    const auto mtl = *ASSERT_VAL(layer.storage.material.lookup(mtl_id.id));
+                    const std::array texs{ mtl->diffuse, mtl->specular };
+                    const auto bound_texs = gfx::activate_textures(
+                        texs | ranges::views::transform([](const auto& x) -> const gfx::texture& { return x->tex; })
+                    );
+                    set_material_shininess(bound_sp, mtl->shininess);
+
+                    gfx::draw draw{ bound_sp, bound_va, bound_texs };
+                    vertex_draw(draw);
+                }
+            };
+        } },
+    };
+}
+
+inline exec::async<game::material> create_crate_material(engine::layer& layer, const example_context& example_ctx) {
+    const auto crate_texture_diffuse_id = "crate.texture.diffuse"_us(layer.storage.string);
+    const auto crate_texture_specular_id = "crate.texture.specular"_us(layer.storage.string);
+
+    const auto crate_texture_diffuse = co_await layer.loader.texture.emplace(
+        crate_texture_diffuse_id, create_texture(example_ctx.examples_path / "textures/03_lightmap_diffuse.png")
+    );
+    const auto crate_texture_specular = co_await layer.loader.texture.emplace(
+        crate_texture_specular_id, create_texture(example_ctx.examples_path / "textures/03_lightmap_specular.png")
+    );
+
+    co_return game::material{
+        .diffuse = crate_texture_diffuse ? crate_texture_diffuse.value() : crate_texture_diffuse.error(),
+        .specular = crate_texture_specular ? crate_texture_specular.value() : crate_texture_specular.error(),
+        .shininess = 128.0f * 0.6f,
+    };
+}
+
+inline exec::async<std::vector<entt::entity>> spawn_box_entities(
+    engine::context& e_ctx [[maybe_unused]],
+    engine::layer& layer,
+    const example_context& example_ctx
+) {
+    // basically require this id to be loaded
+    const auto cube_vertex_id = "cube.vertex"_us(layer.storage.string);
+    std::ignore = co_await layer.loader.vertex.get(cube_vertex_id);
+
+    const auto object_shader_id = "object.shader"_us(layer.storage.string);
+    std::ignore = co_await layer.loader.shader.emplace(object_shader_id, create_object_shader(example_ctx));
+
+    const auto crate_material_id = "crate.material"_us(layer.storage.string);
+    std::ignore = co_await layer.loader.material.emplace(crate_material_id, create_crate_material(layer, example_ctx));
+
+    constexpr auto generate_positions = [](std::size_t rows, std::size_t cols) -> exec::generator<glm::vec3> {
+        for (std::size_t i = 0; i < rows; ++i) {
+            for (std::size_t j = 0; j < cols; ++j) {
+                co_yield glm::vec3{
+                    static_cast<float>(i) * 2.0f,
+                    0.0f,
+                    static_cast<float>(j) * 2.0f,
+                };
+            }
+        }
+    };
+    constexpr std::size_t rows = 5;
+    constexpr std::size_t cols = 5;
+
+    std::vector<entt::entity> entities;
+    entities.reserve(rows * cols);
+
+    auto generator = generate_positions(rows, cols);
+    for (const auto [index, position] : ranges::views::enumerate(generator)) {
+        entt::entity entity = layer.registry.create();
+
+        const float angle = 20.0f * (static_cast<float>(index));
+        layer.registry.emplace<game::shader<engine::layer>::id>(entity, object_shader_id);
+        layer.registry.emplace<game::vertex::id>(entity, cube_vertex_id);
+        layer.registry.emplace<game::material::id>(entity, crate_material_id);
+        layer.registry.emplace<game::local_transform>(
+            entity,
+            game::transform{
+                .tr = position,
+                .rot = glm::angleAxis(glm::radians(angle), layer.world.up()),
+            }
+        );
+
+        entities.push_back(entity);
+    }
+
+    co_return entities;
+}
+
+} // namespace script
