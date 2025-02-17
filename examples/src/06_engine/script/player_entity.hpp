@@ -25,7 +25,7 @@ inline exec::async<entt::entity> spawn_player_entity(game::engine::context& e_ct
     layer.registry.emplace<game::local_transform>(
         entity,
         game::transform{
-            .tr = glm::vec3{ 0.0f, 0.0f, 3.0f },
+            .tr{},
             .rot = glm::angleAxis(glm::radians(-180.0f), layer.world.up()),
         }
     );

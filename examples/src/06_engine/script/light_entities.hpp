@@ -77,16 +77,18 @@ inline exec::async<game::shader<engine::layer>> create_unlit_shader(const exampl
                            std::span<const entt::entity> entities
                        ) {
                     for (const entt::entity entity : entities) {
-                        if (!layer.registry.all_of<game::transform, render::point_light>(entity)) {
+                        const auto [maybe_tf, maybe_pl] =
+                            layer.registry.try_get<game::transform, render::point_light>(entity);
+                        if (!maybe_tf || !maybe_pl) {
                             continue;
                         }
+                        const auto& tf = *maybe_tf;
+                        const auto& pl = *maybe_pl;
 
-                        const auto& tf = layer.registry.get<game::transform>(entity);
                         const glm::mat4 transform =
                             camera_frame.projection * camera_frame.view * glm::translate(glm::mat4(1.0f), tf.tr);
                         set_transform(bound_sp, glm::value_ptr(transform));
 
-                        const auto& pl = layer.registry.get<render::point_light>(entity);
                         const glm::vec3& color = pl.ambient;
                         set_color(bound_sp, color.r, color.g, color.b);
 

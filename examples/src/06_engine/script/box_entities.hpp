@@ -89,11 +89,14 @@ inline exec::async<game::shader<engine::layer>> create_object_shader(const examp
                        std::span<const entt::entity> entities
                    ) {
                 for (const entt::entity entity : entities) {
-                    if (!layer.registry.all_of<game::transform, game::material::id>(entity)) {
+                    const auto [maybe_tf, maybe_mtl_id] =
+                        layer.registry.try_get<game::transform, game::material::id>(entity);
+                    if (!maybe_tf || !maybe_mtl_id) {
                         continue;
                     }
+                    const auto& tf = *maybe_tf;
+                    const auto& mtl_id = *maybe_mtl_id;
 
-                    const auto& tf = layer.registry.get<game::transform>(entity);
                     const glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), tf.tr);
                     const glm::mat4 rotation_matrix = glm::mat4_cast(tf.rot);
                     // TODO: scale
@@ -104,7 +107,6 @@ inline exec::async<game::shader<engine::layer>> create_object_shader(const examp
                     set_it_model(bound_sp, glm::value_ptr(it_model));
                     set_transform(bound_sp, glm::value_ptr(transform));
 
-                    const auto& mtl_id = layer.registry.get<game::material::id>(entity);
                     const auto mtl = *ASSERT_VAL(layer.storage.material.lookup(mtl_id.id));
                     const std::array texs{ mtl->diffuse, mtl->specular };
                     const auto bound_texs = gfx::activate_textures(
