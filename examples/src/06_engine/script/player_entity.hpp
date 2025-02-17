@@ -95,8 +95,7 @@ inline exec::async<entt::entity> spawn_player_entity(game::engine::context& e_ct
     layer.registry.emplace<game::update<engine::layer>>(
         entity,
         [&e_ctx](engine::layer& layer, entt::entity entity, rt::time_point time_point) {
-            if (const bool hass = layer.registry.all_of<player_entity_state, game::transform>(entity);
-                !ASSUME_VAL(hass)) {
+            if (!layer.registry.all_of<player_entity_state, game::transform>(entity)) {
                 return;
             }
 

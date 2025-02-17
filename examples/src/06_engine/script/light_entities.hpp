@@ -77,9 +77,7 @@ inline exec::async<game::shader<engine::layer>> create_unlit_shader(const exampl
                            std::span<const entt::entity> entities
                        ) {
                     for (const entt::entity entity : entities) {
-                        if (const bool has_components =
-                                layer.registry.all_of<game::transform, render::point_light>(entity);
-                            !ASSUME_VAL(has_components)) {
+                        if (!layer.registry.all_of<game::transform, render::point_light>(entity)) {
                             continue;
                         }
 
