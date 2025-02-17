@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
         });
         e_ctx.in_sys->process(layer);
 
-        const game::time_point time_point = e_ctx.time.calculate();
+        const game::time_point& time_point = e_ctx.time_calculate();
 
         // update and execute scripts
         std::ignore = e_ctx.script_exec->execute_batch();
@@ -80,6 +80,9 @@ int main(int argc, char** argv) {
             // });
         }
     }
+
+    // finalize scripts
+    std::ignore = e_ctx.script_exec->execute_batch();
 
     return 0;
 }
