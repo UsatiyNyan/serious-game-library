@@ -14,7 +14,7 @@ namespace sl::game {
 
 struct transform {
     glm::vec3 tr;
-    glm::quat rot;
+    glm::quat rot = glm::identity<glm::quat>();
 
     void translate(const glm::vec3& a_tr) { tr += a_tr; }
     void rotate(const glm::quat& a_rot) { rot = glm::normalize(a_rot * rot); }
@@ -23,11 +23,6 @@ struct transform {
             tr = glm::normalize(tr);
         }
         rot = glm::normalize(rot);
-    }
-    transform& combine(const transform& other) {
-        translate(rot * other.tr);
-        rotate(other.rot);
-        return *this;
     }
 };
 
@@ -43,9 +38,11 @@ inline transform normalize(transform tf) {
     tf.normalize();
     return tf;
 }
-inline transform combine(transform a, const transform& b) {
-    a.combine(b);
-    return a;
+inline transform combine(const transform& a, const transform& b) {
+    return transform{
+        .tr = b.rot * a.tr + b.tr,
+        .rot = b.rot * a.rot,
+    };
 }
 
 // for node updates use this one
