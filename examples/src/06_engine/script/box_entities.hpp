@@ -176,7 +176,7 @@ inline exec::async<std::vector<entt::entity>> spawn_box_entities(
     for (const auto [index, position] : ranges::views::enumerate(generator)) {
         entt::entity entity = layer.registry.create();
 
-        const float angle = 20.0f * (static_cast<float>(index));
+        const float angle0 = 20.0f * (static_cast<float>(index));
         layer.registry.emplace<game::shader<engine::layer>::id>(entity, object_shader_id);
         layer.registry.emplace<game::vertex::id>(entity, cube_vertex_id);
         layer.registry.emplace<game::material::id>(entity, crate_material_id);
@@ -184,7 +184,20 @@ inline exec::async<std::vector<entt::entity>> spawn_box_entities(
             entity,
             game::transform{
                 .tr = position,
-                .rot = glm::angleAxis(glm::radians(angle), layer.world.up()),
+                .rot = glm::angleAxis(glm::radians(angle0), layer.world.up()),
+            }
+        );
+        layer.registry.emplace<game::update<engine::layer>>(
+            entity,
+            [angle0](engine::layer& layer, entt::entity entity, rt::time_point tp) {
+                const float t = tp.now_sec().count();
+                const float angle_v = 2.f;
+                const float angle = angle0 + (angle_v * t);
+                auto& local_tf = layer.registry.get<game::local_transform>(entity);
+                local_tf.set(game::transform{
+                    .tr = local_tf.get()->tr,
+                    .rot = glm::angleAxis(glm::radians(angle), layer.world.up()),
+                });
             }
         );
 
