@@ -38,7 +38,7 @@ inline exec::async<entt::entity> spawn_global_entity(game::engine::context& e_ct
     );
     layer.registry.emplace<game::update<engine::layer>>(
         entity,
-        [&](engine::layer& layer, entt::entity entity, rt::time_point) {
+        [&](engine::layer& layer, entt::entity entity, game::time_point) {
             auto& state = *ASSERT_VAL((layer.registry.try_get<global_entity_state>(entity)));
             state.should_close.release().map([&cw = e_ctx.w_ctx.current_window](bool should_close) {
                 cw.set_should_close(should_close);

@@ -5,6 +5,7 @@
 #pragma once
 
 #include "sl/game/layer.hpp"
+#include "sl/game/time.hpp"
 
 namespace sl::game {
 
@@ -60,6 +61,6 @@ private:
 };
 
 template <GameLayerRequirements Layer>
-using update = function<void(Layer&, entt::entity, rt::time_point)>;
+using update = function<void(Layer&, entt::entity, time_point)>;
 
 } // namespace sl::game

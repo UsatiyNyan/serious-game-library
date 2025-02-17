@@ -6,9 +6,10 @@
 
 #include "sl/game/graphics/context.hpp"
 #include "sl/game/input/system.hpp"
+#include "sl/game/time.hpp"
 
 #include <sl/exec/algo/sched/manual.hpp>
-#include <sl/rt.hpp>
+#include <sl/rt/context.hpp>
 
 namespace sl::game::engine {
 
@@ -24,7 +25,7 @@ public:
 
     std::unique_ptr<exec::manual_executor> script_exec;
 
-    rt::time time;
+    time time;
 };
 
 } // namespace sl::game::engine

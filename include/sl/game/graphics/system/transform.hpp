@@ -13,7 +13,7 @@ namespace sl::game {
 namespace detail {
 
 template <GameLayerRequirements Layer>
-void local_transform_system(Layer& layer, entt::entity entity, rt::time_point time_point [[maybe_unused]]) {
+void local_transform_system(Layer& layer, entt::entity entity, time_point time_point [[maybe_unused]]) {
     auto* maybe_local_tf = layer.registry.template try_get<local_transform>(entity);
     if (maybe_local_tf == nullptr) {
         DEBUG_ASSERT(
@@ -38,7 +38,7 @@ void local_transform_system(Layer& layer, entt::entity entity, rt::time_point ti
 } // namespace detail
 
 template <GameLayerRequirements Layer>
-void local_transform_system(Layer& layer, rt::time_point time_point) {
+void local_transform_system(Layer& layer, time_point time_point) {
     tree_update_system(
         tree_update_order::TOP_DOWN, layer, update<Layer>{ detail::local_transform_system<Layer> }, time_point
     );

@@ -189,7 +189,7 @@ inline exec::async<std::vector<entt::entity>> spawn_box_entities(
         );
         layer.registry.emplace<game::update<engine::layer>>(
             entity,
-            [angle0](engine::layer& layer, entt::entity entity, rt::time_point tp) {
+            [angle0](engine::layer& layer, entt::entity entity, game::time_point tp) {
                 const float t = tp.now_sec().count();
                 const float angle_v = 2.f;
                 const float angle = angle0 + (angle_v * t);

@@ -13,7 +13,7 @@ namespace sl::game {
 namespace detail {
 
 template <GameLayerRequirements Layer>
-void tree_update_top_down(Layer& layer, update<Layer> update, rt::time_point time_point) {
+void tree_update_top_down(Layer& layer, update<Layer> update, time_point time_point) {
     std::deque<entt::entity> queue{ layer.root };
 
     while (!queue.empty()) {
@@ -31,7 +31,7 @@ void tree_update_top_down(Layer& layer, update<Layer> update, rt::time_point tim
 }
 
 template <GameLayerRequirements Layer>
-void tree_update_bottom_up(Layer& layer, update<Layer> update, rt::time_point time_point) {
+void tree_update_bottom_up(Layer& layer, update<Layer> update, time_point time_point) {
     std::vector<entt::entity> tmp{ layer.root };
     std::vector<entt::entity> accum;
 
@@ -61,7 +61,7 @@ enum class tree_update_order {
 };
 
 template <GameLayerRequirements Layer>
-void tree_update_system(tree_update_order order, Layer& layer, update<Layer> update, rt::time_point time_point) {
+void tree_update_system(tree_update_order order, Layer& layer, update<Layer> update, time_point time_point) {
     switch (order) {
     case tree_update_order::TOP_DOWN:
         detail::tree_update_top_down(layer, std::move(update), time_point);
@@ -75,7 +75,7 @@ void tree_update_system(tree_update_order order, Layer& layer, update<Layer> upd
 }
 
 template <GameLayerRequirements Layer>
-void update_system(Layer& layer, rt::time_point time_point) {
+void update_system(Layer& layer, time_point time_point) {
     auto entities = layer.registry.template view<update<Layer>>();
     for (auto&& [entity, update] : entities.each()) {
         update(layer, entity, time_point);
