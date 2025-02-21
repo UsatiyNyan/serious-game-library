@@ -7,16 +7,12 @@
 
 #include <imgui.h>
 #include <sl/exec.hpp>
-#include <sl/exec/coro/async.hpp>
 #include <sl/game.hpp>
 #include <sl/gfx.hpp>
 #include <sl/meta.hpp>
 #include <sl/rt.hpp>
 
-#include <range/v3/view/transform.hpp>
-#include <range/v3/view/zip.hpp>
 #include <spdlog/sinks/stdout_color_sinks.h>
-#include <spdlog/spdlog.h>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/string_cast.hpp>

@@ -18,11 +18,9 @@
 namespace game = sl::game;
 namespace engine = game::engine;
 namespace render = engine::render;
-namespace rt = sl::rt;
 namespace exec = sl::exec;
 namespace gfx = sl::gfx;
 
-using sl::meta::operator""_hsv;
 using sl::meta::operator""_us;
 
 namespace script {

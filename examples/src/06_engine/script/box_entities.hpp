@@ -1,7 +1,5 @@
 //
 // Created by usatiynyan.
-// TODO: require(storage.shader, "shader_id"_hsv);
-// TODO: require(storage.material, assets::material(...));
 //
 
 #pragma once
