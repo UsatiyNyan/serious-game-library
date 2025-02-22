@@ -23,6 +23,7 @@ project(
 
 add_library(${PROJECT_NAME} STATIC
         src/detail/log.cpp
+        src/engine/import.cpp
         src/engine/context.cpp
         src/engine/layer.cpp
         src/graphics/context.cpp)
