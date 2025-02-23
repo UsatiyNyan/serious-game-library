@@ -6,6 +6,7 @@
 
 #include "box_entities.hpp"
 #include "global_entity.hpp"
+#include "imported_entities.hpp"
 #include "light_entities.hpp"
 #include "player_entity.hpp"
 
@@ -78,6 +79,9 @@ inline exec::async<void> create_scene(engine::context& e_ctx, engine::layer& lay
 
     const std::vector<entt::entity> light_entities = co_await spawn_light_entities(e_ctx, layer, example_ctx);
     game::node::attach_children(layer, global_entity, std::span(light_entities));
+
+    const entt::entity imported_entity = co_await spawn_imported_entity(e_ctx, layer, example_ctx, "cube.gltf");
+    game::node::attach_child(layer, global_entity, imported_entity);
 }
 
 } // namespace script
