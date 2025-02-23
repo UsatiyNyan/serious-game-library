@@ -17,13 +17,7 @@ inline exec::async<entt::entity> spawn_imported_entity(
     const std::filesystem::path& mesh_relpath
 ) {
     const entt::entity imported_entity = layer.registry.create();
-    layer.registry.emplace<game::local_transform>(
-        imported_entity,
-        game::transform{
-            .tr{ 0.0f, 2.0f, 0.0f },
-            .rot = glm::identity<glm::quat>(),
-        }
-    );
+    layer.registry.emplace<game::local_transform>(imported_entity, game::transform{});
     game::log::debug("imported_entity={}", static_cast<std::uint32_t>(imported_entity));
 
     const auto object_shader_id = "object.shader"_us(layer.storage.string);
@@ -44,6 +38,10 @@ inline exec::async<entt::entity> spawn_imported_entity(
         game::log::debug("mesh_entity={}", static_cast<std::uint32_t>(mesh_entity));
 
         for (const auto& [primitive_i, primitive] : ranges::views::enumerate(mesh.primitives)) {
+            const auto primitive_vertex_id_str = fmt::format("{}[{}].vertex", mesh.name, primitive_i);
+            const auto primitive_vertex_id =
+                layer.storage.string.insert(sl::meta::hash_string_view{ primitive_vertex_id_str });
+
             const std::uint32_t vert_attr = primitive.attributes.at("POSITION");
             const fx::gltf::Accessor& vert_accessor = mesh_document.accessors.at(vert_attr);
             ASSERT(vert_accessor.componentType == fx::gltf::Accessor::ComponentType::Float);
@@ -51,13 +49,22 @@ inline exec::async<entt::entity> spawn_imported_entity(
             ASSERT(vert_accessor.count > 0);
             const fx::gltf::BufferView& vert_buffer_view =
                 mesh_document.bufferViews.at(static_cast<std::uint32_t>(vert_accessor.bufferView));
-            ASSERT(vert_buffer_view.byteStride == 0);
             const fx::gltf::Buffer& vert_buffer =
                 mesh_document.buffers.at(static_cast<std::uint32_t>(vert_buffer_view.buffer));
-            const auto* vert_data = std::bit_cast<const gfx::va_attrib_field<3, float>*>(
-                vert_buffer.data.data() + vert_buffer_view.byteOffset
-            );
-            const std::span vert_span{ vert_data, vert_accessor.count };
+            const auto* vert_data_begin =
+                vert_buffer.data.data() + vert_buffer_view.byteOffset + vert_accessor.byteOffset;
+            const auto* vert_data_end = vert_data_begin + vert_buffer_view.byteLength;
+            const auto vert_at = [vert_data_begin,
+                                  vert_data_end,
+                                  byte_stride = vert_buffer_view.byteStride,
+                                  count = vert_accessor.count](std::uint32_t i) {
+                using element_type = gfx::va_attrib_field<3, float>;
+                ASSERT(i < count);
+                const auto* vert_data_addr =
+                    vert_data_begin + (byte_stride == 0 ? sizeof(element_type) : byte_stride) * i;
+                ASSERT(vert_data_addr < vert_data_end);
+                return *std::bit_cast<const element_type*>(vert_data_addr);
+            };
 
             const std::uint32_t normal_attr = primitive.attributes.at("NORMAL");
             const fx::gltf::Accessor& normal_accessor = mesh_document.accessors.at(normal_attr);
@@ -66,13 +73,22 @@ inline exec::async<entt::entity> spawn_imported_entity(
             ASSERT(normal_accessor.count > 0);
             const fx::gltf::BufferView& normal_buffer_view =
                 mesh_document.bufferViews.at(static_cast<std::uint32_t>(normal_accessor.bufferView));
-            ASSERT(normal_buffer_view.byteStride == 0);
             const fx::gltf::Buffer& normal_buffer =
                 mesh_document.buffers.at(static_cast<std::uint32_t>(normal_buffer_view.buffer));
-            const auto* normal_data = std::bit_cast<const gfx::va_attrib_field<3, float>*>(
-                normal_buffer.data.data() + normal_buffer_view.byteOffset
-            );
-            const std::span normal_span{ normal_data, normal_accessor.count };
+            const auto* normal_data_begin =
+                normal_buffer.data.data() + normal_buffer_view.byteOffset + normal_accessor.byteOffset;
+            const auto* normal_data_end = normal_data_begin + normal_buffer_view.byteLength;
+            const auto normal_at = [normal_data_begin,
+                                    normal_data_end,
+                                    byte_stride = normal_buffer_view.byteStride,
+                                    count = normal_accessor.count](std::uint32_t i) {
+                using element_type = gfx::va_attrib_field<3, float>;
+                ASSERT(i < count);
+                const auto* normal_data_addr =
+                    normal_data_begin + (byte_stride == 0 ? sizeof(element_type) : byte_stride) * i;
+                ASSERT(normal_data_addr < normal_data_end);
+                return *std::bit_cast<const element_type*>(normal_data_addr);
+            };
 
             const std::uint32_t tex_coord_attr = primitive.attributes.at("TEXCOORD_0");
             const fx::gltf::Accessor& tex_coord_accessor = mesh_document.accessors.at(tex_coord_attr);
@@ -81,13 +97,22 @@ inline exec::async<entt::entity> spawn_imported_entity(
             ASSERT(tex_coord_accessor.count > 0);
             const fx::gltf::BufferView& tex_coord_buffer_view =
                 mesh_document.bufferViews.at(static_cast<std::uint32_t>(tex_coord_accessor.bufferView));
-            ASSERT(tex_coord_buffer_view.byteStride == 0);
             const fx::gltf::Buffer& tex_coord_buffer =
                 mesh_document.buffers.at(static_cast<std::uint32_t>(tex_coord_buffer_view.buffer));
-            const auto* tex_coord_data = std::bit_cast<const gfx::va_attrib_field<2, float>*>(
-                tex_coord_buffer.data.data() + tex_coord_buffer_view.byteOffset
-            );
-            const std::span tex_coord_span{ tex_coord_data, tex_coord_accessor.count };
+            const auto* tex_coord_data_begin =
+                tex_coord_buffer.data.data() + tex_coord_buffer_view.byteOffset + tex_coord_accessor.byteOffset;
+            const auto* tex_coord_data_end = tex_coord_data_begin + tex_coord_buffer_view.byteLength;
+            const auto tex_coord_at = [tex_coord_data_begin,
+                                       tex_coord_data_end,
+                                       byte_stride = tex_coord_buffer_view.byteStride,
+                                       count = tex_coord_accessor.count](std::uint32_t i) {
+                using element_type = gfx::va_attrib_field<2, float>;
+                ASSERT(i < count);
+                const auto* tex_coord_data_addr =
+                    tex_coord_data_begin + (byte_stride == 0 ? sizeof(element_type) : byte_stride) * i;
+                ASSERT(tex_coord_data_addr < tex_coord_data_end);
+                return *std::bit_cast<const element_type*>(tex_coord_data_addr);
+            };
 
             const std::vector<VNT> vnts = [&] {
                 const std::uint32_t vnt_count =
@@ -97,42 +122,52 @@ inline exec::async<entt::entity> spawn_imported_entity(
                 vnts.reserve(vnt_count);
                 for (std::uint32_t vnt_i = 0; vnt_i < vnt_count; ++vnt_i) {
                     vnts.push_back(VNT{
-                        .vert = vert_span[vnt_i],
-                        .normal = normal_span[vnt_i],
-                        .tex_coords = tex_coord_span[vnt_i],
+                        .vert = vert_at(vnt_i),
+                        .normal = normal_at(vnt_i),
+                        .tex_coords = tex_coord_at(vnt_i),
                     });
                 }
                 return vnts;
             }();
-            game::log::debug(
-                "vertices=[\n{}\n]",
-                fmt::join(
-                    vnts | ranges::views::transform([](const VNT& vnt) {
-                        return fmt::format("({})", fmt::join(vnt.vert.value, ","));
-                    }),
-                    "\n"
-                )
-            );
+            // game::log::debug(
+            //     "vertices=[\n{}\n]",
+            //     fmt::join(
+            //         vnts | ranges::views::transform([](const VNT& vnt) {
+            //             return fmt::format("({})", fmt::join(vnt.vert.value, ","));
+            //         }),
+            //         "\n"
+            //     )
+            // );
 
             const fx::gltf::Accessor& indices_accessor =
                 mesh_document.accessors.at(static_cast<std::uint32_t>(primitive.indices));
-            ASSERT(indices_accessor.componentType == fx::gltf::Accessor::ComponentType::UnsignedShort);
+            ASSERT(
+                indices_accessor.componentType == fx::gltf::Accessor::ComponentType::UnsignedShort
+                || indices_accessor.componentType == fx::gltf::Accessor::ComponentType::UnsignedInt
+            );
             ASSERT(indices_accessor.type == fx::gltf::Accessor::Type::Scalar);
             const fx::gltf::BufferView& indices_buffer_view =
                 mesh_document.bufferViews.at(static_cast<std::uint32_t>(indices_accessor.bufferView));
             ASSERT(indices_buffer_view.byteStride == 0);
             const fx::gltf::Buffer& indices_buffer =
                 mesh_document.buffers.at(static_cast<std::uint32_t>(indices_buffer_view.buffer));
-            const auto* indices_data =
-                std::bit_cast<const std::uint16_t*>(indices_buffer.data.data() + indices_buffer_view.byteOffset);
-            const std::span indices_span{ indices_data, indices_accessor.count };
-            game::log::debug("indices=[{}]", fmt::join(indices_span, ","));
 
-            const auto primitive_vertex_id_str = fmt::format("{}[{}].vertex", mesh.name, primitive_i);
-            const auto primitive_vertex_id =
-                layer.storage.string.insert(sl::meta::hash_string_view{ primitive_vertex_id_str });
-            std::ignore =
-                co_await layer.loader.vertex.emplace(primitive_vertex_id, create_vertex(std::span(vnts), indices_span));
+            const auto f = [&](const auto* indices_data) -> exec::async<sl::meta::unit> {
+                const std::span indices_span{ indices_data, indices_accessor.count };
+                // game::log::debug("indices=[{}]", fmt::join(indices_span, ","));
+                ASSERT(co_await layer.loader.vertex.emplace(
+                    primitive_vertex_id, create_vertex(std::span(vnts), indices_span)
+                ));
+                co_return sl::meta::unit{};
+            };
+
+            const auto* indices_data =
+                indices_buffer.data.data() + indices_buffer_view.byteOffset + indices_accessor.byteOffset;
+            if (indices_accessor.componentType == fx::gltf::Accessor::ComponentType::UnsignedShort) {
+                std::ignore = co_await f(std::bit_cast<const std::uint16_t*>(indices_data));
+            } else {
+                std::ignore = co_await f(std::bit_cast<const std::uint32_t*>(indices_data));
+            }
 
             const entt::entity primitive_entity = layer.registry.create();
             layer.registry.emplace<game::shader<engine::layer>::id>(primitive_entity, object_shader_id);
