@@ -115,7 +115,7 @@ inline exec::async<std::vector<entt::entity>>
         entt::entity entity = layer.registry.create();
         layer.registry.emplace<game::shader<engine::layer>::id>(entity, unlit_shader_id);
         layer.registry.emplace<game::vertex::id>(entity, cube_vertex_id);
-        layer.registry.emplace<game::local_transform>(entity, game::transform{ .tr = p, .rot{} });
+        layer.registry.emplace<game::local_transform>(entity, game::transform{ .tr = p });
         layer.registry.emplace<render::point_light>(entity, l);
         entities.push_back(entity);
     }

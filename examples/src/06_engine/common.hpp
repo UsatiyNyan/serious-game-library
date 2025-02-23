@@ -62,9 +62,9 @@ struct VNT {
     gfx::va_attrib_field<2, float> tex_coords;
 };
 
-template <std::size_t vertices_extent, std::size_t indices_extent>
+template <std::size_t vertices_extent, std::unsigned_integral indices_type, std::size_t indices_extent>
 exec::async<game::vertex>
-    create_vertex(std::span<const VNT, vertices_extent> vnts, std::span<const std::uint32_t, indices_extent> indices) {
+    create_vertex(std::span<const VNT, vertices_extent> vnts, std::span<const indices_type, indices_extent> indices) {
     gfx::vertex_array_builder va_builder;
     va_builder.attributes_from<VNT>();
     auto vb = va_builder.buffer<gfx::buffer_type::array, gfx::buffer_usage::static_draw>(vnts);

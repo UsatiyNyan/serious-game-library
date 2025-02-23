@@ -90,6 +90,7 @@ inline exec::async<game::shader<engine::layer>> create_object_shader(const examp
                     const auto [maybe_tf, maybe_mtl_id] =
                         layer.registry.try_get<game::transform, game::material::id>(entity);
                     if (!maybe_tf || !maybe_mtl_id) {
+                        game::log::warn("entity={} missing transform or material", static_cast<std::uint32_t>(entity));
                         continue;
                     }
                     const auto& tf = *maybe_tf;
