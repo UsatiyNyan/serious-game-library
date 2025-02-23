@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "sl/game/ecs.hpp"
 #include "sl/game/time.hpp"
 
 #include "sl/game/graphics.hpp"

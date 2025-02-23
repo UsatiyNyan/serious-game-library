@@ -4,13 +4,13 @@
 
 #pragma once
 
+#include "sl/game/ecs.hpp"
+
 #include <sl/meta/storage/persistent.hpp>
 #include <sl/meta/storage/persistent_array.hpp>
 #include <sl/meta/storage/unique_string.hpp>
 
-#include <entt/entt.hpp>
 #include <function2/function2.hpp>
-#include <sl/rt/time.hpp>
 
 namespace sl::game {
 

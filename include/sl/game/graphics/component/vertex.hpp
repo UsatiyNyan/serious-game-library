@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "sl/game/ecs.hpp"
 #include "sl/game/graphics/context.hpp"
 #include "sl/game/layer.hpp"
 
@@ -14,8 +15,6 @@
 
 #include <sl/meta/storage/persistent.hpp>
 #include <sl/meta/storage/unique_string.hpp>
-
-#include <entt/entt.hpp>
 
 namespace sl::game {
 

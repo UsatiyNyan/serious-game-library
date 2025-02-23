@@ -4,11 +4,11 @@
 
 #pragma once
 
+#include "sl/game/ecs.hpp"
 #include "sl/game/graphics/component/vertex.hpp"
 #include "sl/game/graphics/context.hpp"
 #include "sl/game/layer.hpp"
 
-#include <entt/entt.hpp>
 #include <libassert/assert.hpp>
 #include <tsl/robin_map.h>
 
