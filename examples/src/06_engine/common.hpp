@@ -44,14 +44,14 @@ public:
     std::filesystem::path asset_path;
 };
 
-inline exec::async<game::texture> create_texture(const std::filesystem::path& image_path) {
+inline exec::async<game::texture> create_texture(const std::filesystem::path& image_path, bool flip_vertically = true) {
     gfx::texture_builder tex_builder{ gfx::texture_type::texture_2d };
     tex_builder.set_wrap_s(gfx::texture_wrap::repeat);
     tex_builder.set_wrap_t(gfx::texture_wrap::repeat);
     tex_builder.set_min_filter(gfx::texture_filter::nearest);
     tex_builder.set_max_filter(gfx::texture_filter::nearest);
 
-    const auto image = *ASSERT_VAL(stb::image_load(image_path, 4));
+    const auto image = *ASSERT_VAL(stb::image_load(image_path, 4, flip_vertically));
     tex_builder.set_image(std::span{ image.dimensions }, gfx::texture_format{ GL_RGB, GL_RGBA }, image.data.get());
     co_return game::texture{ .tex = std::move(tex_builder).submit() };
 }

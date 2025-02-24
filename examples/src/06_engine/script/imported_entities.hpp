@@ -10,6 +10,22 @@
 
 namespace script {
 
+inline exec::async<game::material> create_material(
+    engine::layer& layer,
+    sl::meta::unique_string texture_id,
+    const std::filesystem::path& texture_path
+) {
+    const auto texture_result = co_await layer.loader.texture.emplace(texture_id, create_texture(texture_path, false));
+    ASSERT(texture_result.has_value());
+    auto texture = texture_result.value();
+
+    co_return game::material{
+        .diffuse = texture,
+        .specular = texture,
+        .shininess = 128.0f * 0.6f,
+    };
+}
+
 inline exec::async<entt::entity> spawn_imported_entity(
     engine::context& e_ctx [[maybe_unused]],
     engine::layer& layer,
@@ -21,7 +37,7 @@ inline exec::async<entt::entity> spawn_imported_entity(
     game::log::debug("imported_entity={}", static_cast<std::uint32_t>(imported_entity));
 
     const auto object_shader_id = "object.shader"_us(layer.storage.string);
-    const auto crate_material_id = "crate.material"_us(layer.storage.string);
+    const auto default_material_id = "crate.material"_us(layer.storage.string);
 
     const auto meshes_path = example_ctx.asset_path / "meshes";
     std::ifstream mesh_file{ meshes_path / mesh_relpath };
@@ -30,6 +46,33 @@ inline exec::async<entt::entity> spawn_imported_entity(
     const auto mesh_document = engine::import::document_from_json(mesh_json, meshes_path)
                                    .map_error([](const std::string& err) { PANIC(err); })
                                    .value();
+
+    for (const auto& [material_i, material] : ranges::views::enumerate(mesh_document.materials)) {
+        const fx::gltf::Material::Texture& material_texture = material.pbrMetallicRoughness.baseColorTexture;
+        ASSERT(
+            material_texture.index >= 0
+            && static_cast<std::uint32_t>(material_texture.index) < mesh_document.textures.size()
+        );
+        const fx::gltf::Texture& texture =
+            mesh_document.textures.at(static_cast<std::uint32_t>(material_texture.index));
+        ASSERT(texture.source >= 0 && static_cast<std::uint32_t>(texture.source) < mesh_document.images.size());
+        const fx::gltf::Image& image = mesh_document.images.at(static_cast<std::uint32_t>(texture.source));
+        ASSERT(!image.uri.empty());
+        ASSERT(!image.IsEmbeddedResource(), "not supported yet");
+        const auto texture_path = example_ctx.asset_path / "meshes" / std::filesystem::path{ image.uri };
+
+        const auto texture_id_str = fmt::format("imported[{}].base_color_texture", material_i);
+        const auto texture_id = layer.storage.string.insert(sl::meta::hash_string_view{ texture_id_str });
+        const auto material_id_str = fmt::format("imported[{}].material", material_i);
+        const auto material_id = layer.storage.string.insert(sl::meta::hash_string_view{ material_id_str });
+        ASSERT(co_await layer.loader.material.emplace(material_id, create_material(layer, texture_id, texture_path)));
+        game::log::debug(
+            "material={} with texture={} from {}",
+            material_id.string_view(),
+            texture_id.string_view(),
+            texture_path.string()
+        );
+    }
 
     for (const fx::gltf::Mesh& mesh : mesh_document.meshes) {
         const entt::entity mesh_entity = layer.registry.create();
@@ -152,34 +195,44 @@ inline exec::async<entt::entity> spawn_imported_entity(
             const fx::gltf::Buffer& indices_buffer =
                 mesh_document.buffers.at(static_cast<std::uint32_t>(indices_buffer_view.buffer));
 
-            const auto f = [&](const auto* indices_data) -> exec::async<sl::meta::unit> {
+            const auto f = [&](const auto* indices_data) -> exec::async<void> {
                 const std::span indices_span{ indices_data, indices_accessor.count };
                 // game::log::debug("indices=[{}]", fmt::join(indices_span, ","));
                 ASSERT(co_await layer.loader.vertex.emplace(
                     primitive_vertex_id, create_vertex(std::span(vnts), indices_span)
                 ));
-                co_return sl::meta::unit{};
             };
 
             const auto* indices_data =
                 indices_buffer.data.data() + indices_buffer_view.byteOffset + indices_accessor.byteOffset;
             if (indices_accessor.componentType == fx::gltf::Accessor::ComponentType::UnsignedShort) {
-                std::ignore = co_await f(std::bit_cast<const std::uint16_t*>(indices_data));
+                co_await f(std::bit_cast<const std::uint16_t*>(indices_data));
             } else {
-                std::ignore = co_await f(std::bit_cast<const std::uint32_t*>(indices_data));
+                co_await f(std::bit_cast<const std::uint32_t*>(indices_data));
             }
+
+            const auto primitive_material_id = [&layer,
+                                                primitive_material_index = primitive.material,
+                                                default_material_id] {
+                if (primitive_material_index == -1) {
+                    return default_material_id;
+                }
+                const auto material_id_str = fmt::format("imported[{}].material", primitive_material_index);
+                return ASSERT_VAL(layer.storage.string.lookup(sl::meta::hash_string_view{ material_id_str })).value();
+            }();
 
             const entt::entity primitive_entity = layer.registry.create();
             layer.registry.emplace<game::shader<engine::layer>::id>(primitive_entity, object_shader_id);
             layer.registry.emplace<game::vertex::id>(primitive_entity, primitive_vertex_id);
-            layer.registry.emplace<game::material::id>(primitive_entity, crate_material_id);
+            layer.registry.emplace<game::material::id>(primitive_entity, primitive_material_id);
             layer.registry.emplace<game::local_transform>(primitive_entity, game::transform{});
             game::node::attach_child(layer, mesh_entity, primitive_entity);
 
             game::log::debug(
-                "primitive_entity={} vertex_id={}",
+                "primitive_entity={} vertex_id={} material_id={}",
                 static_cast<std::uint32_t>(primitive_entity),
-                primitive_vertex_id.string_view()
+                primitive_vertex_id.string_view(),
+                primitive_material_id.string_view()
             );
         }
     }
