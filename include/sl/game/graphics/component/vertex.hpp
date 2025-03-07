@@ -60,4 +60,22 @@ struct shader {
     function<draw_type(Layer&, const camera_frame&, const gfx::bound_shader_program&)> setup;
 };
 
+struct primitive {
+    struct id {
+        meta::unique_string id;
+    };
+
+    vertex::id vtx;
+    material::id mtl;
+    // TODO: shader?
+};
+
+struct mesh {
+    struct id {
+        meta::unique_string id;
+    };
+
+    std::vector<primitive::id> primitives;
+};
+
 } // namespace sl::game

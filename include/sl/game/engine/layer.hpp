@@ -20,6 +20,8 @@ struct layer : meta::immovable {
             tl::optional<std::size_t> vertex_capacity;
             tl::optional<std::size_t> texture_capacity;
             tl::optional<std::size_t> material_capacity;
+            tl::optional<std::size_t> primitive_capacity;
+            tl::optional<std::size_t> mesh_capacity;
         } storage;
     };
 
@@ -32,6 +34,8 @@ public:
         game::storage<vertex> vertex;
         game::storage<texture> texture;
         game::storage<material> material;
+        game::storage<primitive> primitive;
+        game::storage<mesh> mesh;
     } storage;
 
     struct loader_type {
@@ -39,6 +43,8 @@ public:
         loader<vertex> vertex;
         loader<texture> texture;
         loader<material> material;
+        loader<primitive> primitive;
+        loader<mesh> mesh;
     } loader;
 
     entt::registry registry{};
