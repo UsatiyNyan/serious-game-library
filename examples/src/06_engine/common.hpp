@@ -22,6 +22,7 @@ namespace exec = sl::exec;
 namespace gfx = sl::gfx;
 
 using sl::meta::operator""_us;
+using sl::meta::operator""_ufs;
 
 namespace script {
 
