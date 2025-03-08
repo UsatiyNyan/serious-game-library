@@ -23,9 +23,10 @@ void local_transform_system(Layer& layer, entt::entity entity, time_point time_p
         return;
     }
     meta::dirty<transform>& local_tf = *maybe_local_tf;
+    node& node_component = layer.registry.template get<node>(entity);
     local_tf.release()
         .map([&](const transform& changed_local_tf) -> transform {
-            const entt::entity parent = layer.registry.template get<node>(entity).parent;
+            const entt::entity parent = node_component.parent;
             if (parent == entt::null) { // root
                 return changed_local_tf;
             }
@@ -33,7 +34,18 @@ void local_transform_system(Layer& layer, entt::entity entity, time_point time_p
             const transform& parent_tf = *ASSERT_VAL(maybe_parent_tf, "parent has to have transform", entity, parent);
             return combine(parent_tf, changed_local_tf);
         })
-        .map([&](transform new_tf) { layer.registry.template emplace_or_replace<transform>(entity, new_tf); });
+        .map([&](transform new_tf) {
+            layer.registry.template emplace_or_replace<transform>(entity, new_tf);
+
+            for (entt::entity child_entity : node_component.children) {
+                local_transform* maybe_child_local_tf = layer.registry.template try_get<local_transform>(child_entity);
+                if (maybe_child_local_tf == nullptr) {
+                    continue;
+                }
+                local_transform& child_local_tf = *maybe_child_local_tf;
+                child_local_tf.set_dirty(true);
+            }
+        });
 }
 } // namespace detail
 
