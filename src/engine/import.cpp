@@ -37,7 +37,7 @@ struct load_binary_impl {
         if (std::distance(it, end) > size) {
             return meta::err(std::string{ "buffer overrun" });
         }
-        return std::make_pair(std::next(it, size), std::bit_cast<const T*>(it.base()));
+        return std::make_pair(std::next(it, size), std::bit_cast<const T*>(&*it));
     }
 
 public:
