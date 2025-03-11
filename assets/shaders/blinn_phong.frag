@@ -3,7 +3,11 @@
 struct material_data {
     sampler2D diffuse;
     sampler2D specular;
+    vec4 diffuse_color;
+    vec4 specular_color;
+
     float shininess;
+    uint mode;
 };
 
 struct material {
@@ -136,9 +140,12 @@ vec3 calc_spot_light(spot_light light, material material, vec3 normal, vec3 frag
 }
 
 void main() {
+    const bool material_has_diffuse_texture = (u_material.mode & 1u) != 0u;
+    const bool material_has_specular_texture = (u_material.mode & 2u) != 0u;
+
     material material;
-    material.diffuse = texture(u_material.diffuse, msg_tex_coords).rgb;
-    material.specular = texture(u_material.specular, msg_tex_coords).rgb;
+    material.diffuse = material_has_diffuse_texture ? texture(u_material.diffuse, msg_tex_coords).rgb : u_material.diffuse_color.xyz;
+    material.specular = material_has_specular_texture ? texture(u_material.specular, msg_tex_coords).rgb : u_material.specular_color.xyz;
 
     const vec3 normal = normalize(msg_normal);
     const vec3 view_direction = normalize(u_view_pos - msg_frag_pos);

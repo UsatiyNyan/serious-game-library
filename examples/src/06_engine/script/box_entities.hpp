@@ -32,6 +32,11 @@ inline exec::async<game::shader<engine::layer>> create_object_shader(const examp
     auto set_point_light_size = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1ui, "u_point_light_size"));
     auto set_spot_light_size = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1ui, "u_spot_light_size"));
 
+    auto set_material_diffuse_color =
+        *ASSERT_VAL(sp_bind.make_uniform_v_setter(glUniform4fv, "u_material.diffuse_color", 1));
+    auto set_material_specular_color =
+        *ASSERT_VAL(sp_bind.make_uniform_v_setter(glUniform4fv, "u_material.specular_color", 1));
+    auto set_material_mode = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1ui, "u_material.mode"));
     auto set_material_shininess = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_material.shininess"));
 
     auto set_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_model", 1, false));
@@ -52,6 +57,9 @@ inline exec::async<game::shader<engine::layer>> create_object_shader(const examp
                     set_pl_size = std::move(set_point_light_size),
                     sl_buffer = std::move(sl_buffer),
                     set_sl_size = std::move(set_spot_light_size),
+                    set_material_diffuse_color = std::move(set_material_diffuse_color),
+                    set_material_specular_color = std::move(set_material_specular_color),
+                    set_material_mode = std::move(set_material_mode),
                     set_material_shininess = std::move(set_material_shininess),
                     set_model = std::move(set_model),
                     set_it_model = std::move(set_it_model),
@@ -76,6 +84,9 @@ inline exec::async<game::shader<engine::layer>> create_object_shader(const examp
                        &set_model,
                        &set_it_model,
                        &set_transform,
+                       &set_material_diffuse_color,
+                       &set_material_specular_color,
+                       &set_material_mode,
                        &layer,
                        &camera_frame,
                        &bound_sp,
@@ -107,13 +118,33 @@ inline exec::async<game::shader<engine::layer>> create_object_shader(const examp
                     set_transform(bound_sp, glm::value_ptr(transform));
 
                     const auto mtl = *ASSERT_VAL(layer.storage.material.lookup(mtl_id.id));
-                    const std::array texs{ mtl->diffuse, mtl->specular };
-                    const auto bound_texs = gfx::activate_textures(
-                        texs | ranges::views::transform([](const auto& x) -> const gfx::texture& { return x->tex; })
-                    );
+                    const sl::meta::maybe<gfx::bound_texture> maybe_bound_diffuse_tex =
+                        mtl->diffuse
+                        | sl::meta::pmatch{
+                              [](const sl::meta::persistent<game::texture>& tex
+                              ) -> sl::meta::maybe<gfx::bound_texture> { return tex->tex.activate(0); },
+                              [&](const glm::vec4& clr) -> sl::meta::maybe<gfx::bound_texture> {
+                                  set_material_diffuse_color(bound_sp, glm::value_ptr(clr));
+                                  return sl::meta::null;
+                              },
+                          };
+                    const sl::meta::maybe<gfx::bound_texture> maybe_bound_specular_tex =
+                        mtl->specular
+                        | sl::meta::pmatch{
+                              [](const sl::meta::persistent<game::texture>& tex
+                              ) -> sl::meta::maybe<gfx::bound_texture> { return tex->tex.activate(1); },
+                              [&](const glm::vec4& clr) -> sl::meta::maybe<gfx::bound_texture> {
+                                  set_material_specular_color(bound_sp, glm::value_ptr(clr));
+                                  return sl::meta::null;
+                              },
+                          };
+                    const std::uint32_t mtl_mode = (maybe_bound_diffuse_tex.has_value() ? 0b01 : 0)
+                                                   + (maybe_bound_specular_tex.has_value() ? 0b10 : 0);
+                    set_material_mode(bound_sp, mtl_mode);
+
                     set_material_shininess(bound_sp, mtl->shininess);
 
-                    gfx::draw draw{ bound_sp, bound_va, bound_texs };
+                    gfx::draw draw{ bound_sp, bound_va };
                     vertex_draw(draw);
                 }
             };
@@ -153,6 +184,15 @@ inline exec::async<std::vector<entt::entity>> spawn_box_entities(
 
     const auto crate_material_id = "crate.material"_us(layer.storage.string);
     std::ignore = co_await layer.loader.material.emplace(crate_material_id, create_crate_material(layer, example_ctx));
+
+    const auto solid_material_id = "solid.material"_us(layer.storage.string);
+    std::ignore = co_await layer.loader.material.emplace(solid_material_id, []() -> exec::async<game::material> {
+        co_return game::material{
+            .diffuse = glm::vec4{ 1.0f },
+            .specular = glm::vec4{ 0.0f },
+            .shininess = 128.0f * 0.6f,
+        };
+    }());
 
     constexpr auto generate_positions = [](std::size_t rows, std::size_t cols) -> exec::generator<glm::vec3> {
         for (std::size_t i = 0; i < rows; ++i) {
@@ -203,6 +243,16 @@ inline exec::async<std::vector<entt::entity>> spawn_box_entities(
         entities.push_back(entity);
     }
 
+    if (!entities.empty()) {
+        entt::entity entity = layer.registry.create();
+
+        layer.registry.emplace<game::shader<engine::layer>::id>(entity, object_shader_id);
+        layer.registry.emplace<game::vertex::id>(entity, cube_vertex_id);
+        layer.registry.emplace<game::material::id>(entity, solid_material_id);
+        layer.registry.emplace<game::local_transform>(entity, game::transform{ .tr{ 0.0f, 2.0f, 0.0f } });
+
+        entities.push_back(entity);
+    }
     co_return entities;
 }
 

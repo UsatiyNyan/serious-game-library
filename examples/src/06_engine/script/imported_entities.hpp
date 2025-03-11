@@ -10,22 +10,6 @@
 
 namespace script {
 
-inline exec::async<game::material> create_material(
-    engine::layer& layer,
-    sl::meta::unique_string texture_id,
-    const std::filesystem::path& texture_path
-) {
-    const auto texture_result = co_await layer.loader.texture.emplace(texture_id, create_texture(texture_path, false));
-    ASSERT(texture_result.has_value());
-    auto texture = texture_result.value();
-
-    co_return game::material{
-        .diffuse = texture,
-        .specular = texture,
-        .shininess = 128.0f * 0.6f,
-    };
-}
-
 inline exec::async<entt::entity> spawn_imported_entity(
     engine::context& e_ctx [[maybe_unused]],
     engine::layer& layer,
@@ -49,22 +33,39 @@ inline exec::async<entt::entity> spawn_imported_entity(
     }();
 
     for (const auto& [material_i, material] : ranges::views::enumerate(asset_document.materials)) {
-        const fx::gltf::Material::Texture& material_texture = material.pbrMetallicRoughness.baseColorTexture;
-        if (material_texture.index < 0) {
-            continue;
-        }
-        const fx::gltf::Texture& texture =
-            asset_document.textures.at(static_cast<std::uint32_t>(material_texture.index));
-        ASSERT(texture.source >= 0 && static_cast<std::uint32_t>(texture.source) < asset_document.images.size());
-        const fx::gltf::Image& image = asset_document.images.at(static_cast<std::uint32_t>(texture.source));
-        ASSERT(!image.uri.empty());
-        ASSERT(!image.IsEmbeddedResource(), "not supported yet");
-        const auto texture_path = asset_directory / image.uri;
+        const fx::gltf::Material::PBRMetallicRoughness& material_pbr = material.pbrMetallicRoughness;
+        const fx::gltf::Material::Texture& material_texture = material_pbr.baseColorTexture;
 
         const auto material_id = "{}.material[{}]"_ufs(asset_id, material_i)(layer.storage.string);
-        const auto texture_id = "{}.texture"_ufs(image.uri)(layer.storage.string);
-        ASSERT(co_await layer.loader.material.emplace(material_id, create_material(layer, texture_id, texture_path)));
-        game::log::debug("material_id={} texture_id={}", material_id, texture_id);
+        auto diffuse = co_await [&]() -> exec::async<game::material::tex_or_clr> {
+            if (material_texture.empty()) {
+                const auto color = std::bit_cast<glm::vec4>(material_pbr.baseColorFactor);
+                game::log::debug("color={}", glm::to_string(color));
+                co_return color;
+            }
+
+            const fx::gltf::Texture& texture =
+                asset_document.textures.at(static_cast<std::uint32_t>(material_texture.index));
+            ASSERT(texture.source >= 0 && static_cast<std::uint32_t>(texture.source) < asset_document.images.size());
+            const fx::gltf::Image& image = asset_document.images.at(static_cast<std::uint32_t>(texture.source));
+            ASSERT(!image.uri.empty());
+            ASSERT(!image.IsEmbeddedResource(), "not supported yet");
+            const auto texture_path = asset_directory / image.uri;
+            const auto texture_id = "{}.texture"_ufs(image.uri)(layer.storage.string);
+            game::log::debug("texture_id={}", texture_id);
+            co_return *ASSERT_VAL( //
+                co_await layer.loader.texture.emplace(texture_id, create_texture(texture_path, false))
+            );
+        }();
+
+        ASSERT(co_await layer.loader.material.emplace(material_id, [&]() -> exec::async<game::material> {
+            co_return game::material{
+                .diffuse = std::move(diffuse),
+                .specular = glm::vec4{ 0.05f },
+                .shininess = 128.0f * 0.6f,
+            };
+        }()));
+        game::log::debug("material_id={}", material_id);
     }
 
     for (const auto& [mesh_i, mesh_] : ranges::views::enumerate(asset_document.meshes)) {
@@ -174,6 +175,7 @@ inline exec::async<entt::entity> spawn_imported_entity(
                     }
                     return vnts;
                 }();
+                ASSERT(!vnts.empty());
 
                 const fx::gltf::Accessor& indices_accessor =
                     asset_document.accessors.at(static_cast<std::uint32_t>(primitive.indices));

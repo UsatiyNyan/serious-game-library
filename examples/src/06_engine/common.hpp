@@ -11,6 +11,7 @@
 #include <sl/rt.hpp>
 
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/string_cast.hpp>
 #include <libassert/assert.hpp>
 #include <range/v3/view.hpp>
 #include <stb/image.hpp>

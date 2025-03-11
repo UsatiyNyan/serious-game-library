@@ -30,9 +30,10 @@ struct material {
     struct id {
         meta::unique_string id;
     };
+    using tex_or_clr = std::variant<meta::persistent<texture>, glm::vec4>;
 
-    meta::persistent<texture> diffuse;
-    meta::persistent<texture> specular;
+    tex_or_clr diffuse;
+    tex_or_clr specular;
     float shininess;
 };
 
