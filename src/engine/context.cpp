@@ -4,7 +4,7 @@
 
 #include "sl/game/engine/context.hpp"
 
-#include <sl/exec/algo/make/schedule.hpp>
+#include <sl/exec/algo/sched/start_on.hpp>
 #include <sl/exec/coro/await.hpp>
 
 namespace sl::game::engine {
@@ -29,7 +29,8 @@ bool context::is_ok() const { return !w_ctx.current_window.should_close(); }
 const time_point& context::time_calculate() { return maybe_time_point.emplace(time.calculate()); }
 
 exec::async<meta::maybe<const time_point&>> context::next_frame() {
-    co_await exec::schedule(*script_exec);
+    using exec::operator co_await;
+    co_await exec::start_on(*script_exec);
     co_return maybe_time_point.map([](const time_point& tp) -> const time_point& { return tp; });
 }
 
