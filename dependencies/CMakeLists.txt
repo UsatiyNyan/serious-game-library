@@ -3,15 +3,15 @@
 cpmaddpackage(
         NAME serious-meta-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-meta-library.git"
-        GIT_TAG main)
+        GIT_TAG 1.0.0)
+cpmaddpackage(
+        NAME serious-execution-library
+        GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-execution-library.git"
+        GIT_TAG 1.0.2)
 # provides spdlog
 cpmaddpackage(
         NAME serious-runtime-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-runtime-library.git"
-        GIT_TAG main)
-cpmaddpackage(
-        NAME serious-execution-library
-        GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-execution-library.git"
         GIT_TAG main)
 cpmaddpackage(
         NAME serious-graphics-library
