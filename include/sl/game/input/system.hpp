@@ -7,14 +7,10 @@
 #include "sl/game/input/component.hpp"
 #include "sl/game/input/detail.hpp"
 #include "sl/game/input/event.hpp"
-#include "sl/game/layer.hpp"
 
 namespace sl::game {
 
 // TODO: maybe use stack<handle_result(...)> in order to create input priority system
-
-template <typename Layer>
-concept InputLayerRequirements = GameLayerRequirements<Layer>;
 
 class input_system : meta::immovable {
 public:
@@ -40,11 +36,10 @@ public:
               queue_.push(cursor_input_event{ .pos = cursor_pos });
           }) } {}
 
-    template <InputLayerRequirements Layer>
-    void process(Layer& layer) {
-        auto entities = layer.registry.template view<input<Layer>>();
+    void process(ecs::layer_view lv) {
+        auto entities = lv.registry.template view<input>();
         for (auto&& [entity, input] : entities.each()) {
-            input.handler(layer, queue_.events(), entity);
+            input.handler(lv, queue_.events(), entity);
         }
         queue_.clear();
     }
