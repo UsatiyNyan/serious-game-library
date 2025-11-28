@@ -47,9 +47,6 @@ public:
         loader<mesh> mesh;
     } loader;
 
-    entt::registry registry{};
-    entt::entity root;
-
     basis world{};
 };
 

@@ -32,7 +32,6 @@ layer::layer(exec::executor& executor, config cfg)
           .material{ executor, storage.material },
           .primitive{ executor, storage.primitive },
           .mesh{ executor, storage.mesh },
-      },
-      root{ registry.create() } {}
+      } {}
 
 } // namespace sl::game::engine
