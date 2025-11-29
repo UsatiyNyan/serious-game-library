@@ -7,7 +7,7 @@
 
 #include <libassert/assert.hpp>
 
-namespace sl::game::engine::import {
+namespace sl::game::import {
 
 meta::result<fx::gltf::Document, std::string> document_from_json(
     const nlohmann::json& document_json,
@@ -120,4 +120,4 @@ meta::result<fx::gltf::Document, std::string> document_from_binary(
     }
 }
 
-} // namespace sl::game::engine::import
+} // namespace sl::game::import

@@ -11,7 +11,7 @@
 #include <cstddef>
 #include <span>
 
-namespace sl::game::engine::import {
+namespace sl::game::import {
 
 meta::result<fx::gltf::Document, std::string> document_from_json(
     const nlohmann::json& document_json,
@@ -25,4 +25,4 @@ meta::result<fx::gltf::Document, std::string> document_from_binary(
     fx::gltf::ReadQuotas read_quotas = {}
 );
 
-} // namespace sl::game::engine::import
+} // namespace sl::game::import

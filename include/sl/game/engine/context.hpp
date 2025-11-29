@@ -13,10 +13,10 @@
 #include <sl/meta/monad/maybe.hpp>
 #include <sl/rt/context.hpp>
 
-namespace sl::game::engine {
+namespace sl::game {
 
-struct context {
-    [[nodiscard]] static context initialize(window_context&& w_ctx, int argc = 0, char** argv = nullptr);
+struct engine_context {
+    [[nodiscard]] static engine_context initialize(window_context&& w_ctx, int argc = 0, char** argv = nullptr);
 
     [[nodiscard]] bool is_ok() const;
 
@@ -37,4 +37,4 @@ public:
     meta::maybe<time_point> maybe_time_point;
 };
 
-} // namespace sl::game::engine
+} // namespace sl::game

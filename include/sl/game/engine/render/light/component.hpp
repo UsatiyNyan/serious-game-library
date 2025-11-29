@@ -6,9 +6,11 @@
 
 #include "sl/game/graphics/system/render.hpp"
 
+#include <sl/ecs/layer.hpp>
+
 #include <glm/glm.hpp>
 
-namespace sl::game::engine::render {
+namespace sl::game::render {
 
 struct directional_light {
     glm::vec3 ambient;
@@ -38,16 +40,14 @@ struct spot_light {
     float outer_cutoff;
 };
 
-namespace buffer {
-
 struct directional_light_element {
     using component_type = directional_light;
 
-    template <GfxLayerRequirements Layer>
-    [[nodiscard]] static auto from(const Layer& layer, entt::entity entity, const component_type& component) {
-        const auto& tf = *ASSERT_VAL(layer.registry.template try_get<transform>(entity));
+    [[nodiscard]] static auto
+        from(ecs::layer_view lv, const basis& world, entt::entity entity, const component_type& component) {
+        const auto& tf = *ASSERT_VAL(lv.registry.template try_get<transform>(entity));
         return directional_light_element{
-            .direction = layer.world.direction(tf),
+            .direction = world.direction(tf),
             .ambient = component.ambient,
             .diffuse = component.diffuse,
             .specular = component.specular,
@@ -65,9 +65,9 @@ public:
 struct point_light_element {
     using component_type = point_light;
 
-    template <GfxLayerRequirements Layer>
-    [[nodiscard]] static auto from(const Layer& layer, entt::entity entity, const component_type& component) {
-        const auto& tf = *ASSERT_VAL(layer.registry.template try_get<transform>(entity));
+    [[nodiscard]] static auto
+        from(ecs::layer_view lv, const basis&, entt::entity entity, const component_type& component) {
+        const auto& tf = *ASSERT_VAL(lv.registry.template try_get<transform>(entity));
         return point_light_element{
             .position = tf.tr,
             .ambient = component.ambient,
@@ -94,12 +94,12 @@ public:
 struct spot_light_element {
     using component_type = spot_light;
 
-    template <GfxLayerRequirements Layer>
-    [[nodiscard]] static auto from(const Layer& layer, entt::entity entity, const component_type& component) {
-        const auto& tf = *ASSERT_VAL(layer.registry.template try_get<transform>(entity));
-        return buffer::spot_light_element{
+    [[nodiscard]] static auto
+        from(ecs::layer_view lv, const basis& world, entt::entity entity, const component_type& component) {
+        const auto& tf = *ASSERT_VAL(lv.registry.template try_get<transform>(entity));
+        return spot_light_element{
             .position = tf.tr,
-            .direction = layer.world.direction(tf),
+            .direction = world.direction(tf),
             .ambient = component.ambient,
             .diffuse = component.diffuse,
             .specular = component.specular,
@@ -126,5 +126,4 @@ public:
     float outer_cutoff;
 };
 
-} // namespace buffer
-} // namespace sl::game::engine::render
+} // namespace sl::game::render
