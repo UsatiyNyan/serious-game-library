@@ -189,6 +189,8 @@ public: // behaviour
         co_return co_await std::move(future);
     }
 
+    [[nodiscard]] meta::maybe<reference_type> lookup(meta::unique_string id) const& { return storage_.lookup(id); }
+
 private:
     storage_type storage_;
     RDT descriptor_;

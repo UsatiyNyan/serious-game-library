@@ -26,7 +26,9 @@ add_library(${PROJECT_NAME} STATIC
         src/engine/import.cpp
         src/engine/context.cpp
         src/engine/layer.cpp
-        src/graphics/context.cpp)
+        src/graphics/system/transform.cpp
+        src/graphics/context.cpp
+)
 add_library(sl::game ALIAS ${PROJECT_NAME})
 
 target_include_directories(${PROJECT_NAME} PUBLIC include)

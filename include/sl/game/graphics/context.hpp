@@ -17,7 +17,7 @@
 #include <sl/meta/lifetime/finalizer.hpp>
 
 #include <memory>
-#include <tl/optional.hpp>
+#include <sl/meta/monad/maybe.hpp>
 
 namespace sl::game {
 
@@ -29,8 +29,14 @@ struct window_state {
 };
 
 struct window_context {
-    [[nodiscard]] static tl::optional<window_context>
-        initialize(std::string_view title, glm::ivec2 size, glm::fvec4 clear_color);
+    static constexpr gfx::context::options default_context_options{ 4, 6, GLFW_OPENGL_CORE_PROFILE };
+
+    [[nodiscard]] static meta::maybe<window_context> initialize(
+        meta::maybe<gfx::context::options> maybe_ctx_options,
+        std::string_view title,
+        glm::ivec2 size,
+        glm::fvec4 clear_color
+    );
     [[nodiscard]] window_frame new_frame();
 
 public:

@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "sl/game/ecs.hpp"
 #include "sl/game/graphics/context.hpp"
-#include "sl/game/layer.hpp"
+
+#include <sl/ecs.hpp>
 
 #include <sl/gfx/draw/draw.hpp>
 #include <sl/gfx/shader/program.hpp>
@@ -16,6 +16,8 @@
 #include <sl/meta/storage/persistent.hpp>
 #include <sl/meta/storage/unique_string.hpp>
 
+#include <glm/vec4.hpp>
+
 namespace sl::game {
 
 struct texture {
@@ -23,6 +25,7 @@ struct texture {
         meta::unique_string id;
     };
 
+public:
     gfx::texture tex;
 };
 
@@ -32,6 +35,7 @@ struct material {
     };
     using tex_or_clr = std::variant<meta::persistent<texture>, glm::vec4>;
 
+public:
     tex_or_clr diffuse;
     tex_or_clr specular;
     float shininess;
@@ -42,14 +46,14 @@ struct vertex {
         meta::unique_string id;
     };
 
-    gfx::vertex_array va;
-
     // closure for vb/eb
-    using draw_type = function<void(gfx::draw&)>;
+    using draw_type = meta::unique_function<void(gfx::draw&)>;
+
+public:
+    gfx::vertex_array va;
     draw_type draw;
 };
 
-template <typename Layer>
 struct shader {
     struct id {
         meta::unique_string id;
@@ -57,8 +61,9 @@ struct shader {
 
     gfx::shader_program sp;
 
-    using draw_type = function<void(const gfx::bound_vertex_array&, vertex::draw_type&, std::span<const entt::entity>)>;
-    function<draw_type(Layer&, const camera_frame&, const gfx::bound_shader_program&)> setup;
+    using draw_type =
+        meta::unique_function<void(const gfx::bound_vertex_array&, vertex::draw_type&, std::span<const entt::entity>)>;
+    meta::unique_function<draw_type(ecs::layer_view, const camera_frame&, const gfx::bound_shader_program&)> setup;
 };
 
 struct primitive {
