@@ -11,3 +11,4 @@
 #include "sl/game/update.hpp"
 
 #include "sl/game/engine.hpp"
+#include "sl/game/render.hpp"
