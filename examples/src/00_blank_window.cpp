@@ -4,8 +4,6 @@
 
 #include <sl/game.hpp>
 
-#include <sl/meta/func/unit.hpp>
-
 #include <libassert/assert.hpp>
 #include <spdlog/spdlog.h>
 
@@ -14,8 +12,9 @@ namespace game = sl::game;
 int main() {
     spdlog::set_level(spdlog::level::debug);
 
-    auto gfx =
-        *ASSERT_VAL(game::window_context::initialize("00_blank_window", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
+    auto gfx = *ASSERT_VAL(
+        game::window_context::initialize(sl::meta::null, "00_blank_window", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f })
+    );
 
     while (!gfx.current_window.should_close()) {
         // input
