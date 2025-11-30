@@ -36,10 +36,10 @@ public:
               queue_.push(cursor_input_event{ .pos = cursor_pos });
           }) } {}
 
-    void process(ecs::layer_view lv) {
-        auto entities = lv.registry.template view<input>();
+    void process(ecs::layer& layer) {
+        auto entities = layer.registry.template view<input>();
         for (auto&& [entity, input] : entities.each()) {
-            input.handler(lv, queue_.events(), entity);
+            input.handler(layer, queue_.events(), entity);
         }
         queue_.clear();
     }

@@ -44,8 +44,8 @@ struct directional_light_element {
     using component_type = directional_light;
 
     [[nodiscard]] static auto
-        from(ecs::layer_view lv, const basis& world, entt::entity entity, const component_type& component) {
-        const auto& tf = *ASSERT_VAL(lv.registry.template try_get<transform>(entity));
+        from(const ecs::layer& layer, const basis& world, entt::entity entity, const component_type& component) {
+        const auto& tf = *ASSERT_VAL(layer.registry.template try_get<transform>(entity));
         return directional_light_element{
             .direction = world.direction(tf),
             .ambient = component.ambient,
@@ -66,8 +66,8 @@ struct point_light_element {
     using component_type = point_light;
 
     [[nodiscard]] static auto
-        from(ecs::layer_view lv, const basis&, entt::entity entity, const component_type& component) {
-        const auto& tf = *ASSERT_VAL(lv.registry.template try_get<transform>(entity));
+        from(const ecs::layer& layer, const basis&, entt::entity entity, const component_type& component) {
+        const auto& tf = *ASSERT_VAL(layer.registry.template try_get<transform>(entity));
         return point_light_element{
             .position = tf.tr,
             .ambient = component.ambient,
@@ -95,8 +95,8 @@ struct spot_light_element {
     using component_type = spot_light;
 
     [[nodiscard]] static auto
-        from(ecs::layer_view lv, const basis& world, entt::entity entity, const component_type& component) {
-        const auto& tf = *ASSERT_VAL(lv.registry.template try_get<transform>(entity));
+        from(const ecs::layer& layer, const basis& world, entt::entity entity, const component_type& component) {
+        const auto& tf = *ASSERT_VAL(layer.registry.template try_get<transform>(entity));
         return spot_light_element{
             .position = tf.tr,
             .direction = world.direction(tf),

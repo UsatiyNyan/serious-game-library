@@ -29,13 +29,13 @@ public:
     // TODO: framebuffer as a "return value".
     template <ecs::ResourceDescriptor ShaderDT, ecs::ResourceDescriptor VertexDT>
     meta::result<meta::unit, system_error> execute(const window_frame& window_frame) & {
-        const auto* const maybe_shader_storage = lv.registry.try_get<ecs::resource<ShaderDT>>(lv.root);
+        const auto* const maybe_shader_storage = layer.registry.try_get<ecs::resource<ShaderDT>>(layer.root);
         if (maybe_shader_storage == nullptr) {
             return meta::err(system_error::NO_SHADER_STORAGE);
         }
         const ecs::resource<ShaderDT>& shader_storage = *maybe_shader_storage;
 
-        const auto* const maybe_vertex_storage = lv.registry.try_get<ecs::resource<VertexDT>>(lv.root);
+        const auto* const maybe_vertex_storage = layer.registry.try_get<ecs::resource<VertexDT>>(layer.root);
         if (maybe_vertex_storage == nullptr) {
             return meta::err(system_error::NO_VERTEX_STORAGE);
         }
@@ -46,14 +46,14 @@ public:
         // performance costs.
         const shader_to_vertices_to_entities sve_map = std::invoke([this] {
             shader_to_vertices_to_entities sve_map;
-            const auto entities = lv.registry.template view<typename shader::id, vertex::id>();
+            const auto entities = layer.registry.template view<typename shader::id, vertex::id>();
             for (const auto& [entity, shader, vertex] : entities.each()) {
                 sve_map[shader.id][vertex.id].push_back(entity);
             }
             return sve_map;
         });
 
-        const auto camera_entities = lv.registry.template view<camera, transform>();
+        const auto camera_entities = layer.registry.template view<camera, transform>();
         for (const auto& [camera_entity, camera_component, camera_tf] : camera_entities.each()) {
             const auto camera_frame = window_frame.for_camera(world, camera_component, camera_tf);
 
@@ -69,7 +69,7 @@ public:
                 }
 
                 const auto bound_sp = shader_component->sp.bind();
-                auto draw = shader_component->setup(lv, camera_frame, bound_sp);
+                auto draw = shader_component->setup(layer, camera_frame, bound_sp);
                 if (!ASSUME_VAL(draw)) {
                     continue;
                 }
@@ -95,7 +95,7 @@ public:
     }
 
 public:
-    ecs::layer_view lv;
+    ecs::layer& layer;
     basis world;
 };
 

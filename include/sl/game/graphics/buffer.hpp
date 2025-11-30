@@ -17,8 +17,8 @@ namespace sl::game {
 
 template <typename SSBOElementT>
 concept SSBOElement =
-    requires(ecs::layer_view lv, basis world, entt::entity entity, typename SSBOElementT::component_type component) {
-        { SSBOElementT::from(lv, world, entity, component) } -> std::same_as<SSBOElementT>;
+    requires(const ecs::layer& layer, basis world, entt::entity entity, typename SSBOElementT::component_type component) {
+        { SSBOElementT::from(layer, world, entity, component) } -> std::same_as<SSBOElementT>;
     };
 
 template <SSBOElement SSBOElementT, gfx::buffer_usage buffer_usage = gfx::buffer_usage::dynamic_draw>
@@ -31,8 +31,8 @@ template <SSBOElement SSBOElementT, gfx::buffer_usage buffer_usage = gfx::buffer
 
 // returns new size, which has to be set accordingly
 template <SSBOElement SSBOElementT, gfx::buffer_usage buffer_usage>
-[[nodiscard]] std::uint32_t fill(
-    ecs::layer_view lv,
+[[nodiscard]] std::uint32_t fill_ssbo(
+    const ecs::layer& layer,
     const basis& world,
     gfx::buffer<SSBOElementT, gfx::buffer_type::shader_storage, buffer_usage>& ssbo
 ) {
@@ -41,14 +41,14 @@ template <SSBOElement SSBOElementT, gfx::buffer_usage buffer_usage>
     auto mapped_ssbo = *ASSERT_VAL(std::move(maybe_mapped_ssbo));
     auto mapped_ssbo_data = mapped_ssbo.data();
     std::uint32_t size_counter = 0;
-    auto view = lv.registry.template view<typename SSBOElementT::component_type>();
+    auto view = layer.registry.template view<typename SSBOElementT::component_type>();
     for (const auto& [entity, component] : view.each()) {
         const bool enough_capacity = size_counter < mapped_ssbo_data.size();
         if (!ASSUME_VAL(enough_capacity, mapped_ssbo_data.size())) {
             log::warn("exceeded limit of {} = {}", typeid(SSBOElementT).name(), mapped_ssbo_data.size());
             break;
         }
-        mapped_ssbo_data[size_counter] = SSBOElementT::from(lv, world, entity, component);
+        mapped_ssbo_data[size_counter] = SSBOElementT::from(layer, world, entity, component);
         ++size_counter;
     }
     return size_counter;

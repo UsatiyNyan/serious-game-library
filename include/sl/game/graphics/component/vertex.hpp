@@ -63,7 +63,7 @@ struct shader {
 
     using draw_type =
         meta::unique_function<void(const gfx::bound_vertex_array&, vertex::draw_type&, std::span<const entt::entity>)>;
-    meta::unique_function<draw_type(ecs::layer_view, const camera_frame&, const gfx::bound_shader_program&)> setup;
+    meta::unique_function<draw_type(const ecs::layer&, const camera_frame&, const gfx::bound_shader_program&)> setup;
 };
 
 struct primitive {

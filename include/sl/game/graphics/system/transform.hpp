@@ -12,10 +12,10 @@
 namespace sl::game {
 namespace detail {
 
-void local_transform_system(ecs::layer_view lv, entt::entity entity, time_point time_point [[maybe_unused]]);
+void local_transform_system(ecs::layer& layer, entt::entity entity, time_point time_point [[maybe_unused]]);
 
 } // namespace detail
 
-void local_transform_system(ecs::layer_view lv, time_point time_point);
+void local_transform_system(ecs::layer& layer, time_point time_point);
 
 } // namespace sl::game

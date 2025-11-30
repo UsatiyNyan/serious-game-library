@@ -12,7 +12,7 @@
 namespace sl::game {
 
 struct input {
-    meta::unique_function<void(ecs::layer_view, const input_events&, entt::entity)> handler;
+    meta::unique_function<void(ecs::layer&, const input_events&, entt::entity)> handler;
 };
 
 } // namespace sl::game
