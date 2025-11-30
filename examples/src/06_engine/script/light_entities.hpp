@@ -103,7 +103,7 @@ inline exec::async<game::shader<engine::layer>> create_unlit_shader(const exampl
 }
 
 inline exec::async<std::vector<entt::entity>>
-    spawn_light_entities(engine::context& e_ctx, engine::layer& layer, const example_context& example_ctx) {
+    spawn_light_entities(engine::engine_context& e_ctx, engine::layer& layer, const example_context& example_ctx) {
     const auto cube_vertex_id = "cube.vertex"_us(layer.storage.string);
 
     const auto unlit_shader_id = "unlit.shader"_us(layer.storage.string);
@@ -139,7 +139,7 @@ inline exec::async<std::vector<entt::entity>>
 
     exec::coro_schedule(
         *e_ctx.script_exec,
-        [](engine::context& e_ctx, engine::layer& layer, std::vector<entt::entity> pl_entities) -> exec::async<void> {
+        [](engine::engine_context& e_ctx, engine::layer& layer, std::vector<entt::entity> pl_entities) -> exec::async<void> {
             const auto initial_pls = [&] {
                 std::vector<render::point_light> initial_pls;
                 initial_pls.reserve(pl_entities.size());

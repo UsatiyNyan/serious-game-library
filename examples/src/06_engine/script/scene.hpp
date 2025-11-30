@@ -60,7 +60,7 @@ constexpr std::array cube_indices{
     20u, 21u, 23u, 21u, 22u, 23u, // Bottom face
 };
 
-inline exec::async<void> create_scene(engine::context& e_ctx, engine::layer& layer) {
+inline exec::async<void> create_scene(engine::engine_context& e_ctx, engine::layer& layer) {
     auto example_ctx = example_context::create(e_ctx);
 
     // common vvv

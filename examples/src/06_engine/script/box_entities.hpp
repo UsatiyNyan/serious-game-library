@@ -5,10 +5,11 @@
 #pragma once
 
 #include "../common.hpp"
+#include "sl/game/graphics/buffer.hpp"
 
 namespace script {
 
-inline exec::async<game::shader<engine::layer>> create_object_shader(const example_context& example_ctx) {
+inline exec::async<game::shader> create_object_shader(const example_context& example_ctx, game::basis world) {
     const auto& root = example_ctx.asset_path;
 
     // load_from_file is potentially a blocking
@@ -43,13 +44,14 @@ inline exec::async<game::shader<engine::layer>> create_object_shader(const examp
     auto set_it_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix3fv, "u_it_model", 1, false));
     auto set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false));
 
-    auto dl_buffer = render::buffer::initialize<render::buffer::directional_light_element>(1);
-    auto pl_buffer = render::buffer::initialize<render::buffer::point_light_element>(16);
-    auto sl_buffer = render::buffer::initialize<render::buffer::spot_light_element>(1);
+    auto dl_buffer = game::make_and_initialize_ssbo<game::render::directional_light_element>(1);
+    auto pl_buffer = game::make_and_initialize_ssbo<game::render::point_light_element>(16);
+    auto sl_buffer = game::make_and_initialize_ssbo<game::render::spot_light_element>(1);
 
-    co_return game::shader<engine::layer>{
+    co_return game::shader{
         .sp{ std::move(sp) },
         .setup{ [ //
+                    world,
                     set_view_pos = std::move(set_view_pos),
                     dl_buffer = std::move(dl_buffer),
                     set_dl_size = std::move(set_directional_light_size),
@@ -64,19 +66,19 @@ inline exec::async<game::shader<engine::layer>> create_object_shader(const examp
                     set_model = std::move(set_model),
                     set_it_model = std::move(set_it_model),
                     set_transform = std::move(set_transform)](
-                    engine::layer& layer, //
+                    const ecs::layer& layer,
                     const game::camera_frame& camera_frame,
                     const gfx::bound_shader_program& bound_sp
                 ) mutable {
             set_view_pos(bound_sp, camera_frame.position.x, camera_frame.position.y, camera_frame.position.z);
 
-            const std::uint32_t dl_size = render::buffer::fill(layer, dl_buffer);
+            const std::uint32_t dl_size = game::fill_ssbo(layer, world, dl_buffer);
             set_dl_size(bound_sp, dl_size);
 
-            const std::uint32_t pl_size = render::buffer::fill(layer, pl_buffer);
+            const std::uint32_t pl_size = game::fill_ssbo(layer, world, pl_buffer);
             set_pl_size(bound_sp, pl_size);
 
-            const std::uint32_t sl_size = render::buffer::fill(layer, sl_buffer);
+            const std::uint32_t sl_size = game::fill_ssbo(layer, world, sl_buffer);
             set_sl_size(bound_sp, sl_size);
 
             return [ //
@@ -171,7 +173,7 @@ inline exec::async<game::material> create_crate_material(engine::layer& layer, c
 }
 
 inline exec::async<std::vector<entt::entity>> spawn_box_entities(
-    engine::context& e_ctx [[maybe_unused]],
+    engine::engine_context& e_ctx [[maybe_unused]],
     engine::layer& layer,
     const example_context& example_ctx
 ) {

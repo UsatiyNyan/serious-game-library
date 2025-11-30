@@ -2,15 +2,10 @@
 // Created by usatiynyan.
 //
 
-#include "06_engine/common.hpp"
 #include "06_engine/script/scene.hpp"
+#include "common.hpp"
 
 #include <imgui.h>
-#include <sl/exec.hpp>
-#include <sl/game.hpp>
-#include <sl/gfx.hpp>
-#include <sl/meta.hpp>
-#include <sl/rt.hpp>
 
 #include <spdlog/sinks/stdout_color_sinks.h>
 

@@ -12,7 +12,7 @@ struct global_entity_state {
     sl::meta::dirty<bool> should_close;
 };
 
-inline exec::async<entt::entity> spawn_global_entity(game::engine::context& e_ctx, game::engine::layer& layer) {
+inline exec::async<entt::entity> spawn_global_entity(game::engine::engine_context& e_ctx, game::engine::layer& layer) {
     const entt::entity entity = layer.root;
 
     layer.registry.emplace<global_entity_state>(entity);

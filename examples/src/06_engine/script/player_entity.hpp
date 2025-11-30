@@ -20,7 +20,7 @@ struct player_entity_state {
     glm::dvec2 cursor_curr;
 };
 
-inline exec::async<entt::entity> spawn_player_entity(game::engine::context& e_ctx, game::engine::layer& layer) {
+inline exec::async<entt::entity> spawn_player_entity(game::engine::engine_context& e_ctx, game::engine::layer& layer) {
     const entt::entity entity = layer.registry.create();
     layer.registry.emplace<game::local_transform>(
         entity,

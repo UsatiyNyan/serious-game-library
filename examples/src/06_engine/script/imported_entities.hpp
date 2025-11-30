@@ -11,7 +11,7 @@
 namespace script {
 
 inline exec::async<entt::entity> spawn_imported_entity(
-    engine::context& e_ctx [[maybe_unused]],
+    engine::engine_context& e_ctx [[maybe_unused]],
     engine::layer& layer,
     const example_context& example_ctx,
     const std::filesystem::path& asset_relpath

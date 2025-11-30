@@ -4,23 +4,28 @@
 
 #pragma once
 
+#include <sl/ecs.hpp>
 #include <sl/exec.hpp>
 #include <sl/game.hpp>
 #include <sl/gfx.hpp>
 #include <sl/meta.hpp>
 #include <sl/rt.hpp>
 
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/string_cast.hpp>
-#include <libassert/assert.hpp>
-#include <range/v3/view.hpp>
+#include <imgui.h>
 #include <stb/image.hpp>
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/string_cast.hpp>
+
+#include <libassert/assert.hpp>
+#include <range/v3/view.hpp>
+#include <spdlog/spdlog.h>
+
 namespace game = sl::game;
-namespace engine = game::engine;
-namespace render = engine::render;
 namespace exec = sl::exec;
 namespace gfx = sl::gfx;
+namespace ecs = sl::ecs;
 
 using sl::meta::operator""_us;
 using sl::meta::operator""_ufs;
@@ -28,7 +33,7 @@ using sl::meta::operator""_ufs;
 namespace script {
 
 struct example_context {
-    static example_context create(const engine::context& e_ctx) {
+    static example_context create(const game::engine_context& e_ctx) {
         // build/examples/ -> build/assets
         auto examples_path = e_ctx.root_path;
         auto build_path = examples_path.parent_path();
