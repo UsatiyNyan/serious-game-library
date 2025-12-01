@@ -25,6 +25,7 @@ add_library(${PROJECT_NAME} STATIC
         src/detail/log.cpp
         src/engine/import.cpp
         src/engine/context.cpp
+        src/graphics/system/render.cpp
         src/graphics/system/transform.cpp
         src/graphics/context.cpp
 )
