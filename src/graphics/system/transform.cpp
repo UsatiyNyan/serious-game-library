@@ -20,10 +20,10 @@ void local_transform_system(ecs::layer& layer, entt::entity entity, time_point t
         return;
     }
     meta::dirty<transform>& local_tf = *maybe_local_tf;
-    node& node_component = layer.registry.template get<node>(entity);
+    node* node_component = layer.registry.template try_get<node>(entity);
     local_tf.release()
         .map([&](const transform& changed_local_tf) -> transform {
-            const entt::entity parent = node_component.parent;
+            const entt::entity parent = node_component == nullptr ? entt::null : node_component->parent;
             if (parent == entt::null) { // root
                 return changed_local_tf;
             }
@@ -34,7 +34,10 @@ void local_transform_system(ecs::layer& layer, entt::entity entity, time_point t
         .map([&](transform new_tf) {
             layer.registry.template emplace_or_replace<transform>(entity, new_tf);
 
-            for (entt::entity child_entity : node_component.children) {
+            if (node_component == nullptr) {
+                return;
+            }
+            for (entt::entity child_entity : node_component->children) {
                 local_transform* maybe_child_local_tf = layer.registry.template try_get<local_transform>(child_entity);
                 if (maybe_child_local_tf == nullptr) {
                     continue;
