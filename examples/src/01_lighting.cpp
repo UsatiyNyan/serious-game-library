@@ -44,8 +44,12 @@ exec::async<std::tuple<entt::entity, ecs::resource<game::shader>&, ecs::resource
 
     layer.registry.emplace<global_entity_state>(entity);
 
-    auto& shader_resource = layer.registry.emplace<ecs::resource<game::shader>>(entity);
-    auto& vertex_resource = layer.registry.emplace<ecs::resource<game::vertex>>(entity);
+    auto& shader_resource = layer.registry.emplace<ecs::resource<game::shader>::ptr_type>(
+        entity, ecs::resource<game::shader>::make(*e_ctx.script_exec)
+    );
+    auto& vertex_resource = layer.registry.emplace<ecs::resource<game::vertex>::ptr_type>(
+        entity, ecs::resource<game::vertex>::make(*e_ctx.script_exec)
+    );
 
     layer.registry.emplace<game::local_transform>(entity);
     layer.registry.emplace<game::transform>(entity);
@@ -79,8 +83,8 @@ exec::async<std::tuple<entt::entity, ecs::resource<game::shader>&, ecs::resource
 
     co_return std::tuple<entt::entity, ecs::resource<game::shader>&, ecs::resource<game::vertex>&>{
         entity,
-        shader_resource,
-        vertex_resource,
+        *shader_resource,
+        *vertex_resource,
     };
 }
 
@@ -217,6 +221,7 @@ exec::async<entt::entity>
     const auto entity = layer.registry.create();
 
     layer.registry.emplace<game::shader::id>(entity, "source.shader"_us(example_ctx.uss));
+    layer.registry.emplace<game::vertex::id>(entity, "cube.vertex"_us(example_ctx.uss));
     layer.registry.emplace<source_entity_state>(
         entity,
         source_entity_state{
@@ -335,7 +340,7 @@ constexpr std::array cube_indices{
     20u, 21u, 23u, 21u, 22u, 23u, // Bottom face
 };
 
-exec::async<game::shader> create_object_shader(const script::example_context& example_ctx, entt::entity source_entity) {
+exec::async<game::shader> create_object_shader(const script::example_context& example_ctx) {
     const std::array<gfx::shader, 2> shaders{
         *ASSERT_VAL(gfx::shader::load_from_file(
             gfx::shader_type::vertex, example_ctx.examples_path / "shaders/01_lighting_object.vert"
@@ -361,7 +366,6 @@ exec::async<game::shader> create_object_shader(const script::example_context& ex
     co_return game::shader{
         .sp{ std::move(sp) },
         .setup{ [ //
-                    source_entity,
                     set_model = std::move(set_model),
                     set_it_model = std::move(set_it_model),
                     set_transform = std::move(set_transform),
@@ -376,20 +380,19 @@ exec::async<game::shader> create_object_shader(const script::example_context& ex
                     const game::camera_frame& camera_frame,
                     const gfx::bound_shader_program& bound_sp
                 ) mutable {
-            if (auto* source = layer.registry.try_get<source_entity_state>(source_entity)) {
-                set_light_color(bound_sp, source->color.r, source->color.g, source->color.b);
-                set_ambient_strength(bound_sp, source->ambient_strength);
-                set_specular_strength(bound_sp, source->specular_strength);
-                set_shininess(bound_sp, source->shininess);
-            }
-
-            if (auto* tf = layer.registry.try_get<game::transform>(source_entity)) {
-                set_light_pos(bound_sp, tf->tr.x, tf->tr.y, tf->tr.z);
-            }
-
             {
                 const auto& tr = camera_frame.position;
                 set_view_pos(bound_sp, tr.x, tr.y, tr.z);
+            }
+
+            for (auto [source_entity, source_state, tf] :
+                 layer.registry.view<source_entity_state, game::transform>().each()) {
+                set_light_color(bound_sp, source_state.color.r, source_state.color.g, source_state.color.b);
+                set_ambient_strength(bound_sp, source_state.ambient_strength);
+                set_specular_strength(bound_sp, source_state.specular_strength);
+                set_shininess(bound_sp, source_state.shininess);
+
+                set_light_pos(bound_sp, tf.tr.x, tf.tr.y, tf.tr.z);
             }
 
             return [&](const gfx::bound_vertex_array& bound_va,
@@ -482,6 +485,16 @@ exec::async<void> create_scene(
     const game::basis& world
 ) {
     auto [global_entity, shader_resource, vertex_resource] = co_await create_global_entity(e_ctx, layer);
+    // common vvv
+    std::ignore =
+        co_await shader_resource.require("object.shader"_us(example_ctx.uss), create_object_shader(example_ctx));
+    std::ignore =
+        co_await shader_resource.require("source.shader"_us(example_ctx.uss), create_source_shader(example_ctx));
+    std::ignore = co_await vertex_resource.require(
+        "cube.vertex"_us(example_ctx.uss), script::create_vertex(std::span(cube_vertices), std::span(cube_indices))
+    );
+    // common ^^^
+
     const auto player_entity = co_await create_player_entity(e_ctx, layer, world);
     game::node::attach_child(layer, global_entity, player_entity);
 
@@ -490,17 +503,6 @@ exec::async<void> create_scene(
 
     const auto box_entities = co_await create_cube_entities(example_ctx, layer, world);
     game::node::attach_children(layer, global_entity, std::span{ box_entities });
-
-    // common vvv
-    std::ignore = co_await shader_resource.require(
-        "object.shader"_us(example_ctx.uss), create_object_shader(example_ctx, source_entity)
-    );
-    std::ignore =
-        co_await shader_resource.require("source.shader"_us(example_ctx.uss), create_source_shader(example_ctx));
-    std::ignore = co_await vertex_resource.require(
-        "cube.vertex"_us(example_ctx.uss), script::create_vertex(std::span(cube_vertices), std::span(cube_indices))
-    );
-    // common ^^^
 }
 
 void main(int argc, char** argv) {
@@ -546,16 +548,14 @@ void main(int argc, char** argv) {
         // overlay
         auto imgui_frame = e_ctx.w_ctx.imgui.new_frame();
         if (const auto imgui_window = imgui_frame.begin("light")) {
-            auto [maybe_state, maybe_tf] =
-                layer.registry.try_get<source_entity_state, game::local_transform>(layer.root);
-            if (maybe_tf && maybe_tf->get()) {
-                game::transform tf = maybe_tf->get().value();
-                if (ImGui::SliderFloat3("light pos", glm::value_ptr(tf.tr), -10.0f, 10.0f)) {
-                    maybe_tf->set(tf);
+            for (auto [entity, state, tf_component] :
+                 layer.registry.view<source_entity_state, game::local_transform>().each()) {
+                if (tf_component.get().has_value()) {
+                    game::transform tf = tf_component.get().value();
+                    if (ImGui::SliderFloat3("light pos", glm::value_ptr(tf.tr), -10.0f, 10.0f)) {
+                        tf_component.set(tf);
+                    }
                 }
-            }
-            if (maybe_state) {
-                auto& state = *maybe_state;
                 ImGui::ColorEdit3("light color", glm::value_ptr(state.color));
                 ImGui::SliderFloat("ambient strength", &state.ambient_strength, 0.0f, 1.0f);
                 ImGui::SliderFloat("specular strength", &state.specular_strength, 0.0f, 1.0f);
