@@ -22,15 +22,10 @@
 #include <range/v3/view.hpp>
 #include <spdlog/spdlog.h>
 
-namespace game = sl::game;
-namespace exec = sl::exec;
-namespace gfx = sl::gfx;
-namespace ecs = sl::ecs;
-
 using sl::meta::operator""_us;
 using sl::meta::operator""_ufs;
 
-namespace script {
+namespace sl::script {
 
 struct example_context {
     static example_context create(const game::engine_context& e_ctx) {
@@ -39,6 +34,7 @@ struct example_context {
         auto build_path = examples_path.parent_path();
         auto asset_path = build_path / "assets";
         return example_context{
+            .uss{ meta::unique_string_storage::init_type{} },
             .examples_path = std::move(examples_path),
             .build_path = std::move(build_path),
             .asset_path = std::move(asset_path),
@@ -46,6 +42,7 @@ struct example_context {
     }
 
 public:
+    meta::unique_string_storage uss;
     std::filesystem::path examples_path;
     std::filesystem::path build_path;
     std::filesystem::path asset_path;
@@ -69,12 +66,14 @@ struct VNT {
     gfx::va_attrib_field<2, float> tex_coords;
 };
 
-template <std::size_t vertices_extent, std::unsigned_integral indices_type, std::size_t indices_extent>
-exec::async<game::vertex>
-    create_vertex(std::span<const VNT, vertices_extent> vnts, std::span<const indices_type, indices_extent> indices) {
+template <typename VT, std::size_t vertices_extent, std::unsigned_integral indices_type, std::size_t indices_extent>
+exec::async<game::vertex> create_vertex(
+    std::span<const VT, vertices_extent> vertices,
+    std::span<const indices_type, indices_extent> indices
+) {
     gfx::vertex_array_builder va_builder;
-    va_builder.attributes_from<VNT>();
-    auto vb = va_builder.buffer<gfx::buffer_type::array, gfx::buffer_usage::static_draw>(vnts);
+    va_builder.attributes_from<VT>();
+    auto vb = va_builder.buffer<gfx::buffer_type::array, gfx::buffer_usage::static_draw>(vertices);
     auto eb = va_builder.buffer<gfx::buffer_type::element_array, gfx::buffer_usage::static_draw>(indices);
     co_return game::vertex{
         .va = std::move(va_builder).submit(),
@@ -82,4 +81,4 @@ exec::async<game::vertex>
     };
 }
 
-}; // namespace script
+} // namespace sl::script
