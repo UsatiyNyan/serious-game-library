@@ -16,17 +16,17 @@ meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(c
     using vertex_to_entities = tsl::robin_map</* vertex */ meta::unique_string, std::vector<entt::entity>>;
     using shader_to_vertices_to_entities = tsl::robin_map</* shader */ meta::unique_string, vertex_to_entities>;
 
-    auto* const maybe_shader_resource = layer.registry.try_get<ecs::resource<shader>>(layer.root);
+    auto* const maybe_shader_resource = layer.registry.try_get<ecs::resource<shader>::ptr_type>(layer.root);
     if (maybe_shader_resource == nullptr) {
         return meta::err(error_type::NO_SHADER_STORAGE);
     }
-    auto& shader_resource = *maybe_shader_resource;
+    auto& shader_resource = **maybe_shader_resource;
 
-    auto* const maybe_vertex_resource = layer.registry.try_get<ecs::resource<vertex>>(layer.root);
+    auto* const maybe_vertex_resource = layer.registry.try_get<ecs::resource<vertex>::ptr_type>(layer.root);
     if (maybe_vertex_resource == nullptr) {
         return meta::err(error_type::NO_VERTEX_STORAGE);
     }
-    auto& vertex_resource = *maybe_vertex_resource;
+    auto& vertex_resource = **maybe_vertex_resource;
 
     // Im thinking that recalculating these is much better then .
     // Having to keep track of appearing entities/components (essentially caching) might come with other more subtle
@@ -46,7 +46,7 @@ meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(c
 
         for (const auto& [shader_id, ve_map] : sve_map) {
             auto maybe_shader_component = shader_resource.lookup(shader_id);
-            if (!ASSUME_VAL(maybe_shader_component.has_value())) {
+            if (!ASSUME_VAL(maybe_shader_component.has_value(), shader_id.string_view())) {
                 continue;
             }
             meta::persistent<shader> shader_component = std::move(maybe_shader_component).value();
@@ -63,7 +63,7 @@ meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(c
 
             for (const auto& [vertex_id, entities] : ve_map) {
                 auto maybe_vertex_component = vertex_resource.lookup(vertex_id);
-                if (!ASSUME_VAL(maybe_vertex_component.has_value())) {
+                if (!ASSUME_VAL(maybe_vertex_component.has_value(), vertex_id.string_view())) {
                     continue;
                 }
                 meta::persistent<vertex> vertex_component = std::move(maybe_vertex_component).value();
