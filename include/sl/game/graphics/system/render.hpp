@@ -22,7 +22,7 @@ struct graphics_system {
 
 public:
     // TODO: framebuffer as a "return value".
-    meta::result<meta::unit, error_type> execute(const window_frame& window_frame) &;
+    meta::result<meta::unit, error_type> execute(const window_frame& a_window_frame) &;
 
 public:
     ecs::layer& layer;

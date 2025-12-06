@@ -12,7 +12,7 @@
 
 namespace sl::game {
 
-meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(const window_frame& window_frame) & {
+meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(const window_frame& a_window_frame) & {
     using vertex_to_entities = tsl::robin_map</* vertex */ meta::unique_string, std::vector<entt::entity>>;
     using shader_to_vertices_to_entities = tsl::robin_map</* shader */ meta::unique_string, vertex_to_entities>;
 
@@ -42,7 +42,7 @@ meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(c
 
     const auto camera_entities = layer.registry.template view<camera, transform>();
     for (const auto& [camera_entity, camera_component, camera_tf] : camera_entities.each()) {
-        const auto camera_frame = window_frame.for_camera(world, camera_component, camera_tf);
+        const auto camera_frame = a_window_frame.for_camera(world, camera_component, camera_tf);
 
         for (const auto& [shader_id, ve_map] : sve_map) {
             auto maybe_shader_component = shader_resource.lookup_unsafe(shader_id);
