@@ -3,7 +3,9 @@
 //
 
 #include "common.hpp"
+#include "sl/game/graphics/component/overlay.hpp"
 #include "sl/game/graphics/component/transform.hpp"
+#include "sl/game/graphics/system/overlay.hpp"
 #include "sl/game/graphics/system/render.hpp"
 
 namespace sl {
@@ -236,6 +238,31 @@ exec::async<entt::entity>
         game::transform{
             .tr{ 2.0f, 2.0f, -3.0f },
             .rot = glm::angleAxis(0.0f, world.up()),
+        }
+    );
+    layer.registry.emplace<game::overlay>(
+        entity,
+        [](ecs::layer& layer, gfx::imgui_frame& imgui_frame, entt::entity entity) {
+            if (const auto imgui_window = imgui_frame.begin("light")) {
+                auto [maybe_state, maybe_local_transform] =
+                    layer.registry.try_get<source_entity_state, game::local_transform>(entity);
+                if (!maybe_state || !maybe_local_transform) {
+                    return;
+                }
+                auto& state = *maybe_state;
+                auto& local_transform = *maybe_local_transform;
+
+                if (local_transform.get().has_value()) {
+                    game::transform tf = local_transform.get().value();
+                    if (ImGui::SliderFloat3("light pos", glm::value_ptr(tf.tr), -10.0f, 10.0f)) {
+                        local_transform.set(tf);
+                    }
+                }
+                ImGui::ColorEdit3("light color", glm::value_ptr(state.color));
+                ImGui::SliderFloat("ambient strength", &state.ambient_strength, 0.0f, 1.0f);
+                ImGui::SliderFloat("specular strength", &state.specular_strength, 0.0f, 1.0f);
+                ImGui::SliderInt("shininess", &state.shininess, 2, 256, "%d", ImGuiSliderFlags_Logarithmic);
+            }
         }
     );
 
@@ -515,6 +542,7 @@ void main(int argc, char** argv) {
     auto example_ctx = script::example_context::create(e_ctx);
     ecs::layer layer{};
     game::graphics_system gfx_system{ .layer = layer, .world{} };
+    game::overlay_system overlay_system{ .layer = layer };
 
     exec::coro_schedule(*e_ctx.script_exec, create_scene(e_ctx, example_ctx, layer, gfx_system.world));
 
@@ -526,9 +554,11 @@ void main(int argc, char** argv) {
                 cw.viewport(glm::ivec2{}, frame_buffer_size);
             }
         );
-        e_ctx.w_ctx.state->window_content_scale.release().map([](const glm::fvec2& window_content_scale) {
-            ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
-        });
+        e_ctx.w_ctx.state->window_content_scale
+            .release() //
+            .map([&overlay_system](const glm::fvec2& window_content_scale) {
+                overlay_system.on_window_content_scale_changed(window_content_scale);
+            });
         e_ctx.in_sys->process(layer);
 
         const game::time_point& time_point = e_ctx.time_calculate();
@@ -544,24 +574,9 @@ void main(int argc, char** argv) {
         const auto window_frame = e_ctx.w_ctx.new_frame();
         gfx_system.execute(window_frame);
 
-        // TODO: UI component
         // overlay
         auto imgui_frame = e_ctx.w_ctx.imgui.new_frame();
-        if (const auto imgui_window = imgui_frame.begin("light")) {
-            for (auto [entity, state, tf_component] :
-                 layer.registry.view<source_entity_state, game::local_transform>().each()) {
-                if (tf_component.get().has_value()) {
-                    game::transform tf = tf_component.get().value();
-                    if (ImGui::SliderFloat3("light pos", glm::value_ptr(tf.tr), -10.0f, 10.0f)) {
-                        tf_component.set(tf);
-                    }
-                }
-                ImGui::ColorEdit3("light color", glm::value_ptr(state.color));
-                ImGui::SliderFloat("ambient strength", &state.ambient_strength, 0.0f, 1.0f);
-                ImGui::SliderFloat("specular strength", &state.specular_strength, 0.0f, 1.0f);
-                ImGui::SliderInt("shininess", &state.shininess, 2, 256, "%d", ImGuiSliderFlags_Logarithmic);
-            }
-        }
+        overlay_system.execute(imgui_frame);
     }
 }
 
