@@ -23,9 +23,6 @@
 namespace sl::ecs {
 
 template <typename T>
-struct resource;
-
-template <typename T>
 struct resource : meta::unique {
     using ptr_type = std::unique_ptr<resource<T>>;
     using storage_type = meta::persistent_storage<meta::unique_string, T>;
@@ -42,15 +39,13 @@ public: // creation
     }
 
     resource(typename storage_type::init_type storage_init, exec::executor& executor)
-        : storage_{ std::move(storage_init) }, executor_{ executor } {}
+        : storage_{ std::move(storage_init) }, mutex_{ executor } {}
 
 public: // behaviour
     using reference_type = meta::persistent<T>;
     using const_reference_type = meta::const_persistent<T>;
     using promise_type = exec::promise<reference_type, meta::unit>;
 
-    // PRECONDITION: expects to be started on provided executor
-    //
     // there can be 2 different contexts:
     //  - loader - unique, executes descriptor::load, and fulfills promises
     //  - awaiter - can be many, awaits for loader to
@@ -61,30 +56,35 @@ public: // behaviour
         require(meta::unique_string id, auto loader, bool override_after_load = true) & {
         using exec::operator co_await;
 
-        if (auto maybe_value = storage_.lookup(id)) {
-            co_return maybe_value.value();
-        }
-
         {
+            exec::mutex_lock lock = (co_await mutex_.lock()).value();
+
+            if (auto maybe_value = storage_.lookup(id)) {
+                co_await std::move(lock).unlock();
+                co_return maybe_value.value();
+            }
+
             const auto [promises_it, promises_is_emplaced] = promises_by_id_.try_emplace(id);
             if (!promises_is_emplaced) {
                 // awaiter context
                 auto [future, promise] = exec::make_contract<reference_type, meta::unit>();
                 promises_it.value().push_back(std::move(promise));
-                // future continuation is guaranteed to be on the executor_ below, where promises are fulfilled
-                auto result = co_await std::move(future) /* | exec::continue_on(executor_) */;
+                co_await std::move(lock).unlock();
+
+                auto result = co_await std::move(future);
                 if (result.has_value()) {
                     co_return std::move(result).value();
                 }
                 co_return meta::null;
             }
+
+            co_await std::move(lock).unlock();
         }
 
         // loader context
-
         meta::maybe<T> maybe_loaded_value = co_await std::move(loader);
-        co_await exec::start_on(executor_);
 
+        exec::mutex_lock lock = (co_await mutex_.lock()).value();
         meta::maybe<reference_type> maybe_reference =
             std::move(maybe_loaded_value).map([this, id, override_after_load](T value) -> reference_type {
                 if (override_after_load) {
@@ -112,15 +112,17 @@ public: // behaviour
             }
         }
 
+        co_await std::move(lock).unlock();
         co_return maybe_reference;
     }
 
-    // PRECONDITION: expects to be started on provided executor
-    //
     // There can be only awaiter context.
     // If storage does not contain id and there is not a loader present - meta::null is returned.
     //
-    exec::async<meta::maybe<T>> request(meta::unique_string id) & {
+    exec::async<meta::maybe<reference_type>> request(meta::unique_string id) & {
+        using exec::operator co_await;
+
+        exec::mutex_lock lock = (co_await mutex_.lock()).value();
         if (auto maybe_value = storage_.lookup(id)) {
             co_return maybe_value.value();
         }
@@ -132,18 +134,24 @@ public: // behaviour
 
         auto [future, promise] = exec::make_contract<reference_type, meta::unit>();
         promises_it.value().push_back(std::move(promise));
-        co_return co_await std::move(future);
+        co_await std::move(lock).unlock();
+
+        auto result = co_await std::move(future);
+        if (result.has_value()) {
+            co_return std::move(result).value();
+        }
+        co_return meta::null;
     }
 
-    [[nodiscard]] meta::maybe<reference_type> lookup(meta::unique_string id) & { return storage_.lookup(id); }
-    [[nodiscard]] meta::maybe<const_reference_type> lookup(meta::unique_string id) const& {
+    [[nodiscard]] meta::maybe<reference_type> lookup_unsafe(meta::unique_string id) & { return storage_.lookup(id); }
+    [[nodiscard]] meta::maybe<const_reference_type> lookup_unsafe(meta::unique_string id) const& {
         return storage_.lookup(id);
     }
 
 private:
     storage_type storage_;
     tsl::robin_map<meta::unique_string, std::vector<promise_type>> promises_by_id_{};
-    exec::executor& executor_;
+    exec::mutex<> mutex_;
 };
 
 } // namespace sl::ecs

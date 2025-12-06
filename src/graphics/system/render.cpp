@@ -45,7 +45,7 @@ meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(c
         const auto camera_frame = window_frame.for_camera(world, camera_component, camera_tf);
 
         for (const auto& [shader_id, ve_map] : sve_map) {
-            auto maybe_shader_component = shader_resource.lookup(shader_id);
+            auto maybe_shader_component = shader_resource.lookup_unsafe(shader_id);
             if (!ASSUME_VAL(maybe_shader_component.has_value(), shader_id.string_view())) {
                 continue;
             }
@@ -62,7 +62,7 @@ meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(c
             }
 
             for (const auto& [vertex_id, entities] : ve_map) {
-                auto maybe_vertex_component = vertex_resource.lookup(vertex_id);
+                auto maybe_vertex_component = vertex_resource.lookup_unsafe(vertex_id);
                 if (!ASSUME_VAL(maybe_vertex_component.has_value(), vertex_id.string_view())) {
                     continue;
                 }
