@@ -25,7 +25,15 @@
 using sl::meta::operator""_us;
 using sl::meta::operator""_ufs;
 
-namespace sl::script {
+namespace sl {
+
+struct VNT {
+    gfx::va_attrib_field<3, float> vert;
+    gfx::va_attrib_field<3, float> normal;
+    gfx::va_attrib_field<2, float> tex_coords;
+};
+
+namespace script {
 
 struct example_context {
     static example_context create(const game::engine_context& e_ctx) {
@@ -60,12 +68,6 @@ inline exec::async<game::texture> create_texture(const std::filesystem::path& im
     co_return game::texture{ .tex = std::move(tex_builder).submit() };
 }
 
-struct VNT {
-    gfx::va_attrib_field<3, float> vert;
-    gfx::va_attrib_field<3, float> normal;
-    gfx::va_attrib_field<2, float> tex_coords;
-};
-
 template <typename VT, std::size_t vertices_extent, std::unsigned_integral indices_type, std::size_t indices_extent>
 exec::async<game::vertex> create_vertex(
     std::span<const VT, vertices_extent> vertices,
@@ -81,4 +83,5 @@ exec::async<game::vertex> create_vertex(
     };
 }
 
-} // namespace sl::script
+} // namespace script
+} // namespace sl

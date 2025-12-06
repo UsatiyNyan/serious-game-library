@@ -44,5 +44,12 @@ void main() {
 
     const vec3 emission = material_emission * (material_specular == vec3(0.0f, 0.0f, 0.0f) ? 1.0f : 0.0f);
 
-    frag_color = vec4(ambient + diffuse + specular + emission, 1.0);
+    const vec3 result = ambient + diffuse + specular + emission;
+
+    if (length(ambient) < 0.001) {
+        frag_color = vec4(1.0, 0.0, 0.0, 1.0);
+        return;
+    }
+
+    frag_color = vec4(result, 1.0);
 }

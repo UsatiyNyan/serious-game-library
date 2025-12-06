@@ -1,74 +1,114 @@
 //
 // Created by usatiynyan.
-// TODO: fix this
 //
 
-#include <imgui.h>
-#include <sl/game.hpp>
-#include <sl/gfx.hpp>
-#include <sl/meta.hpp>
-#include <sl/rt.hpp>
+#include "common.hpp"
+#include "sl/game/graphics/component/overlay.hpp"
+#include "sl/game/graphics/component/transform.hpp"
+#include "sl/game/graphics/system/overlay.hpp"
+#include "sl/game/graphics/system/render.hpp"
+#include <sl/gfx/vtx/texture.hpp>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
-#include <libassert/assert.hpp>
-#include <spdlog/spdlog.h>
+namespace sl {
 
-#include <stb/image.hpp>
-
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/string_cast.hpp>
-
-namespace game = sl::game;
-namespace gfx = sl::gfx;
-namespace rt = sl::rt;
-
-template <typename... Args>
-using uniform_setter = fu2::unique_function<void(const gfx::bound_shader_program&, Args...)>;
-
-struct object_shader {
-    gfx::shader_program sp;
-
-    uniform_setter<const float*> set_model;
-    uniform_setter<const float*> set_it_model;
-    uniform_setter<const float*> set_transform;
-
-    struct material {
-        // diffuse
-        // specular
-        // emission
-        uniform_setter<float> set_shininess;
-    };
-    material material;
-
-    struct light {
-        uniform_setter<float, float, float> set_position;
-        uniform_setter<float, float, float> set_ambient;
-        uniform_setter<float, float, float> set_diffuse;
-        uniform_setter<float, float, float> set_specular;
-    };
-    light light;
-
-    uniform_setter<float, float, float> set_view_pos;
-    uniform_setter<float> set_time;
+struct global_entity_state {
+    meta::dirty<bool> should_close;
+    game::time_point time_point;
 };
 
-gfx::texture create_texture(const std::filesystem::path& image_path) {
-    gfx::texture_builder tex_builder{ gfx::texture_type::texture_2d };
-    tex_builder.set_wrap_s(gfx::texture_wrap::repeat);
-    tex_builder.set_wrap_t(gfx::texture_wrap::repeat);
-    tex_builder.set_min_filter(gfx::texture_filter::nearest);
-    tex_builder.set_max_filter(gfx::texture_filter::nearest);
+struct source_entity_state {
+    glm::vec3 ambient;
+    glm::vec3 diffuse;
+    glm::vec3 specular;
+};
 
-    const auto image = *ASSERT_VAL(stb::image_load(image_path, 4));
-    tex_builder.set_image(std::span{ image.dimensions }, gfx::texture_format{ GL_RGB, GL_RGBA }, image.data.get());
-    return std::move(tex_builder).submit();
+struct cursor_state {
+    glm::dvec2 first{};
+    glm::dvec2 last{};
+};
+
+struct player_entity_state {
+    meta::maybe<cursor_state> cursor;
+
+    meta::dirty<bool> rmb{ false };
+
+    bool esc = false;
+    bool q = false;
+    bool w = false;
+    bool e = false;
+    bool a = false;
+    bool s = false;
+    bool d = false;
+};
+
+struct material {
+    meta::persistent<game::texture> diffuse;
+    meta::persistent<game::texture> specular;
+    meta::persistent<game::texture> emission;
+    float shininess;
+};
+
+exec::async<game::shader> create_source_shader(const script::example_context& example_ctx) {
+    const std::array<gfx::shader, 2> shaders{
+        *ASSERT_VAL(gfx::shader::load_from_file(
+            gfx::shader_type::vertex, example_ctx.examples_path / "shaders/01_lighting_source.vert"
+        )),
+        *ASSERT_VAL(gfx::shader::load_from_file(
+            gfx::shader_type::fragment, example_ctx.examples_path / "shaders/01_lighting_source.frag"
+        )),
+    };
+    auto sp = *ASSERT_VAL(gfx::shader_program::build(std::span{ shaders }));
+    auto sp_bind = sp.bind();
+
+    auto set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false));
+    auto set_light_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_color"));
+    co_return game::shader{
+        .sp{ std::move(sp) },
+        .setup{ [ //
+                    set_transform = std::move(set_transform),
+                    set_light_color = std::move(set_light_color)](
+                    const ecs::layer& layer, //
+                    const game::camera_frame& camera_frame,
+                    const gfx::bound_shader_program& bound_sp
+                ) mutable {
+            return [&](const gfx::bound_vertex_array& bound_va,
+                       game::vertex::draw_type& vertex_draw,
+                       std::span<const entt::entity> entities) {
+                gfx::draw draw{ bound_sp, bound_va };
+
+                for (const entt::entity entity : entities) {
+                    const auto [state, tf] = layer.registry.try_get<source_entity_state, game::transform>(entity);
+
+                    if (state) {
+                        set_light_color(bound_sp, state->ambient.r, state->ambient.g, state->ambient.b);
+                    }
+
+                    if (tf) {
+                        const glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), tf->tr);
+                        const glm::mat4 rotation_matrix = glm::mat4_cast(tf->rot);
+                        const glm::mat4 model = translation_matrix * rotation_matrix;
+                        const glm::mat4 transform = camera_frame.projection * camera_frame.view * model;
+                        set_transform(bound_sp, glm::value_ptr(transform));
+                    }
+
+                    vertex_draw(draw);
+                }
+            };
+        } },
+    };
 }
 
-object_shader create_object_shader(const std::filesystem::path& root) {
+exec::async<game::shader> create_object_shader(const script::example_context& example_ctx) {
     const std::array<gfx::shader, 2> shaders{
-        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::vertex, root / "shaders/03_lightmap.vert")),
-        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::fragment, root / "shaders/03_lightmap.frag")),
+        *ASSERT_VAL(gfx::shader::load_from_file(
+            gfx::shader_type::vertex, example_ctx.examples_path / "shaders/03_lightmap.vert"
+        )),
+        *ASSERT_VAL(gfx::shader::load_from_file(
+            gfx::shader_type::fragment, example_ctx.examples_path / "shaders/03_lightmap.frag"
+        )),
     };
+
     auto sp = *ASSERT_VAL(gfx::shader_program::build(std::span{ shaders }));
     auto sp_bind = sp.bind();
 
@@ -79,91 +119,356 @@ object_shader create_object_shader(const std::filesystem::path& root) {
     };
     sp_bind.initialize_tex_units(std::span{ material_textures });
 
-    return object_shader{
-        .sp = std::move(sp),
-        .set_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_model", 1, false)),
-        .set_it_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix3fv, "u_it_model", 1, false)),
-        .set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false)),
-        .material{
-            .set_shininess = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_material.shininess")),
-        },
-        .light{
-            .set_position = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.position")),
-            .set_ambient = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.ambient")),
-            .set_diffuse = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.diffuse")),
-            .set_specular = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.specular")),
-        },
-        .set_view_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_view_pos")),
-        .set_time = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_time")),
-    };
-}
-
-auto create_source_shader(const std::filesystem::path& root) {
-    const std::array<gfx::shader, 2> shaders{
-        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::vertex, root / "shaders/01_lighting_source.vert")),
-        *ASSERT_VAL(gfx::shader::load_from_file(gfx::shader_type::fragment, root / "shaders/01_lighting_source.frag")),
-    };
-    auto sp = *ASSERT_VAL(gfx::shader_program::build(std::span{ shaders }));
-    auto sp_bind = sp.bind();
+    auto set_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_model", 1, false));
+    auto set_it_model = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix3fv, "u_it_model", 1, false));
     auto set_transform = *ASSERT_VAL(sp_bind.make_uniform_matrix_v_setter(glUniformMatrix4fv, "u_transform", 1, false));
-    auto set_light_color = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light_color"));
-    return std::make_tuple(std::move(sp), std::move(set_transform), std::move(set_light_color));
+
+    auto set_view_pos = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_view_pos"));
+    auto set_time = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_time"));
+
+    auto set_light_position = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.position"));
+    auto set_light_ambient = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.ambient"));
+    auto set_light_diffuse = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.diffuse"));
+    auto set_light_specular = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform3f, "u_light.specular"));
+
+    auto set_material_shininess = *ASSERT_VAL(sp_bind.make_uniform_setter(glUniform1f, "u_material.shininess"));
+
+    co_return game::shader{
+        .sp{ std::move(sp) },
+        .setup{ [ //
+                    set_model = std::move(set_model),
+                    set_it_model = std::move(set_it_model),
+                    set_transform = std::move(set_transform),
+                    set_view_pos = std::move(set_view_pos),
+                    set_time = std::move(set_time),
+                    set_light_position = std::move(set_light_position),
+                    set_light_ambient = std::move(set_light_ambient),
+                    set_light_diffuse = std::move(set_light_diffuse),
+                    set_light_specular = std::move(set_light_specular),
+                    set_material_shininess = std::move(set_material_shininess)](
+                    const ecs::layer& layer,
+                    const game::camera_frame& camera_frame,
+                    const gfx::bound_shader_program& bound_sp
+                ) mutable {
+            {
+                const auto& tr = camera_frame.position;
+                set_view_pos(bound_sp, tr.x, tr.y, tr.z);
+            }
+
+            if (auto* global_state = layer.registry.try_get<global_entity_state>(layer.root)) {
+                set_time(bound_sp, global_state->time_point.now_sec().count());
+            }
+
+            for (auto [source_entity, source_state, tf] :
+                 layer.registry.view<source_entity_state, game::transform>().each()) {
+                set_light_position(bound_sp, tf.tr.x, tf.tr.y, tf.tr.z);
+                set_light_ambient(bound_sp, source_state.ambient.r, source_state.ambient.g, source_state.ambient.b);
+                set_light_diffuse(bound_sp, source_state.diffuse.r, source_state.diffuse.g, source_state.diffuse.b);
+                set_light_specular(bound_sp, source_state.specular.r, source_state.specular.g, source_state.specular.b);
+            }
+
+            return [&](const gfx::bound_vertex_array& bound_va,
+                       game::vertex::draw_type& vertex_draw,
+                       std::span<const entt::entity> entities) {
+                for (const entt::entity entity : entities) {
+                    const auto [maybe_tf, maybe_material] = layer.registry.try_get<game::transform, material>(entity);
+                    if (!maybe_tf || !maybe_material) {
+                        game::log::warn("entity={} missing transform or material", static_cast<std::uint32_t>(entity));
+                        continue;
+                    }
+                    const auto& tf = *maybe_tf;
+                    const auto& mat = *maybe_material;
+
+                    const glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), tf.tr);
+                    const glm::mat4 rotation_matrix = glm::mat4_cast(tf.rot);
+                    // TODO: scale
+                    const glm::mat4 model = translation_matrix * rotation_matrix;
+                    const glm::mat3 it_model = glm::transpose(glm::inverse(model));
+                    const glm::mat4 transform = camera_frame.projection * camera_frame.view * model;
+                    set_model(bound_sp, glm::value_ptr(model));
+                    set_it_model(bound_sp, glm::value_ptr(it_model));
+                    set_transform(bound_sp, glm::value_ptr(transform));
+
+                    const auto bound_diffuse = mat.diffuse->tex.activate(0);
+                    const auto bound_specular = mat.specular->tex.activate(1);
+                    const auto bound_emission = mat.emission->tex.activate(2);
+                    set_material_shininess(bound_sp, mat.shininess);
+
+                    gfx::draw draw{ bound_sp, bound_va };
+                    vertex_draw(draw);
+                }
+            };
+        } },
+    };
 }
 
-struct VNT {
-    gfx::va_attrib_field<3, float> vert;
-    gfx::va_attrib_field<3, float> normal;
-    gfx::va_attrib_field<2, float> tex_coords;
-};
+exec::async<
+    std::tuple<entt::entity, ecs::resource<game::shader>&, ecs::resource<game::vertex>&, ecs::resource<game::texture>&>>
+    create_global_entity(game::engine_context& e_ctx, ecs::layer& layer) {
+    const entt::entity entity = layer.root;
 
-template <std::size_t vertices_extent, std::size_t indices_extent>
-auto create_buffers(std::span<const VNT, vertices_extent> vnts, std::span<const unsigned, indices_extent> indices) {
-    gfx::vertex_array_builder va_builder;
-    va_builder.attributes_from<VNT>();
-    auto vb = va_builder.buffer<gfx::buffer_type::array, gfx::buffer_usage::static_draw>(vnts);
-    auto eb = va_builder.buffer<gfx::buffer_type::element_array, gfx::buffer_usage::static_draw>(indices);
-    auto va = std::move(va_builder).submit();
-    return std::make_tuple(std::move(vb), std::move(eb), std::move(va));
+    layer.registry.emplace<global_entity_state>(entity);
+
+    auto& shader_resource = layer.registry.emplace<ecs::resource<game::shader>::ptr_type>(
+        entity, ecs::resource<game::shader>::make(*e_ctx.script_exec)
+    );
+    auto& vertex_resource = layer.registry.emplace<ecs::resource<game::vertex>::ptr_type>(
+        entity, ecs::resource<game::vertex>::make(*e_ctx.script_exec)
+    );
+    auto& texture_resource = layer.registry.emplace<ecs::resource<game::texture>::ptr_type>(
+        entity, ecs::resource<game::texture>::make(*e_ctx.script_exec)
+    );
+
+    layer.registry.emplace<game::local_transform>(entity);
+    layer.registry.emplace<game::transform>(entity);
+
+    layer.registry.emplace<game::input>(
+        entity,
+        [](ecs::layer& layer, const game::input_events& input_events, entt::entity entity) {
+            using action = game::keyboard_input_event::action_type;
+            auto& state = *ASSERT_VAL((layer.registry.try_get<global_entity_state>(entity)));
+            const sl::meta::pmatch handle{
+                [&state](const game::keyboard_input_event& keyboard) {
+                    using key = game::keyboard_input_event::key_type;
+                    if (keyboard.key == key::ESCAPE) {
+                        const bool prev = state.should_close.get().value_or(false);
+                        state.should_close.set(prev || keyboard.action == action::PRESS);
+                    }
+                },
+                [](const auto&) {},
+            };
+            for (const auto& input_event : input_events) {
+                handle(input_event);
+            }
+        }
+    );
+    layer.registry.emplace<game::update>(
+        entity,
+        [&](ecs::layer& layer, entt::entity entity, game::time_point time_point) {
+            auto& state = layer.registry.get<global_entity_state>(entity);
+            state.should_close.release().map([&cw = e_ctx.w_ctx.current_window](bool should_close) {
+                cw.set_should_close(should_close);
+            });
+            state.time_point = time_point;
+        }
+    );
+
+    co_return std::tuple //
+        <entt::entity, ecs::resource<game::shader>&, ecs::resource<game::vertex>&, ecs::resource<game::texture>&>{
+            entity,
+            *shader_resource,
+            *vertex_resource,
+            *texture_resource,
+        };
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmissing-braces"
+exec::async<entt::entity>
+    create_player_entity(game::engine_context& e_ctx, ecs::layer& layer, const game::basis& world) {
+    const auto entity = layer.registry.create();
+
+    layer.registry.emplace<player_entity_state>(entity);
+    layer.registry.emplace<game::local_transform>(
+        entity,
+        game::transform{
+            .tr{ 0.0f, 0.0f, 3.0f },
+            .rot = glm::angleAxis(glm::radians(-180.0f), world.up()),
+        }
+    );
+    layer.registry.emplace<game::camera>(
+        entity,
+        game::perspective_projection{
+            .fov = glm::radians(45.0f),
+            .near = 0.1f,
+            .far = 100.0f,
+        }
+    );
+
+    layer.registry.emplace<game::input>(
+        entity,
+        [](ecs::layer& layer, const game::input_events& input_events, entt::entity entity) {
+            using action = game::keyboard_input_event::action_type;
+            auto& state = *ASSERT_VAL((layer.registry.try_get<player_entity_state>(entity)));
+            const meta::pmatch handle{
+                [&state](const game::keyboard_input_event& keyboard) {
+                    using key = game::keyboard_input_event::key_type;
+                    const bool is_down = keyboard.action == action::PRESS || keyboard.action == action::REPEAT;
+                    switch (keyboard.key) {
+                    case key::Q:
+                        state.q = is_down;
+                        break;
+                    case key::W:
+                        state.w = is_down;
+                        break;
+                    case key::E:
+                        state.e = is_down;
+                        break;
+                    case key::A:
+                        state.a = is_down;
+                        break;
+                    case key::S:
+                        state.s = is_down;
+                        break;
+                    case key::D:
+                        state.d = is_down;
+                        break;
+                    default:
+                        break;
+                    }
+                },
+                [&state](const game::mouse_button_input_event& mouse_button) {
+                    using button = game::mouse_button_input_event::button_type;
+                    if (mouse_button.button == button::RIGHT) {
+                        state.rmb.set_if_ne(
+                            mouse_button.action == action::PRESS || mouse_button.action == action::REPEAT
+                        );
+                    }
+                },
+                [&state](const game::cursor_input_event& cursor) {
+                    if (state.cursor.has_value()) {
+                        state.cursor->last = cursor.pos;
+                    } else {
+                        state.cursor.emplace(cursor_state{
+                            .first = cursor.pos,
+                            .last = cursor.pos,
+                        });
+                    }
+                },
+            };
+            for (const auto& input_event : input_events) {
+                handle(input_event);
+            }
+        }
+    );
+    layer.registry.emplace<game::update>(
+        entity,
+        [&e_ctx, &world](ecs::layer& layer, entt::entity entity, game::time_point time_point) {
+            const auto& [maybe_state, maybe_tf] = layer.registry.try_get<player_entity_state, game::transform>(entity);
+            if (!ASSERT_VAL(maybe_state) || !maybe_tf) {
+                return;
+            }
+            player_entity_state& state = *maybe_state;
+            game::transform& tf = *maybe_tf;
+
+            const auto& maybe_cursor = std::exchange(state.cursor, meta::null);
+            if (maybe_cursor.has_value() && state.rmb.get().value_or(false)) {
+                const auto& cursor = maybe_cursor.value();
+                const auto cursor_offset = cursor.last - cursor.first;
+
+                constexpr float sensitivity = -glm::radians(0.2f);
+                const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
+                const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
+
+                const glm::quat rot_yaw = glm::angleAxis(yaw, world.y);
+                tf.rotate(rot_yaw);
+
+                const glm::vec3 camera_forward = tf.rot * world.forward();
+                const glm::vec3 camera_right = glm::cross(camera_forward, world.up());
+                const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
+                tf.rotate(rot_pitch);
+            }
+
+            {
+                constexpr float acc = 5.0f;
+                const float speed = acc * time_point.delta_sec().count();
+                const auto new_tr = [&state, &world] {
+                    constexpr auto sub = [](bool a, bool b) {
+                        return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
+                    };
+                    return sub(state.e, state.q) * world.up() + //
+                           sub(state.d, state.a) * world.right() + //
+                           sub(state.w, state.s) * world.forward();
+                }();
+                tf.translate(speed * (tf.rot * new_tr));
+            }
+
+            state.rmb.get().map([&cw = e_ctx.w_ctx.current_window](bool rmb) {
+                cw.set_input_mode(GLFW_CURSOR, rmb ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+            });
+        }
+    );
+
+    co_return entity;
+}
+
+exec::async<entt::entity>
+    create_source_entity(script::example_context& example_ctx, ecs::layer& layer, const game::basis& world) {
+    const auto entity = layer.registry.create();
+
+    layer.registry.emplace<game::shader::id>(entity, "source.shader"_us(example_ctx.uss));
+    layer.registry.emplace<game::vertex::id>(entity, "cube.vertex"_us(example_ctx.uss));
+    layer.registry.emplace<source_entity_state>(
+        entity,
+        source_entity_state{
+            .ambient{ 0.2f, 0.2f, 0.2f },
+            .diffuse{ 0.5f, 0.5f, 0.5f },
+            .specular{ 1.0f, 1.0f, 1.0f },
+        }
+    );
+    layer.registry.emplace<game::local_transform>(
+        entity,
+        game::transform{
+            .tr{ 2.0f, 2.0f, -3.0f },
+            .rot = glm::angleAxis(0.0f, world.up()),
+        }
+    );
+    layer.registry.emplace<game::overlay>(entity, [](ecs::layer& layer, gfx::imgui_frame&, entt::entity entity) {
+        auto [maybe_state, maybe_local_transform] =
+            layer.registry.try_get<source_entity_state, game::local_transform>(entity);
+        if (!maybe_state || !maybe_local_transform) {
+            return;
+        }
+        auto& state = *maybe_state;
+        auto& local_transform = *maybe_local_transform;
+
+        if (local_transform.get().has_value()) {
+            game::transform tf = local_transform.get().value();
+            if (ImGui::SliderFloat3("light position", glm::value_ptr(tf.tr), -10.0f, 10.0f)) {
+                local_transform.set(tf);
+            }
+        }
+        ImGui::ColorEdit3("light ambient", glm::value_ptr(state.ambient));
+        ImGui::ColorEdit3("light diffuse", glm::value_ptr(state.diffuse));
+        ImGui::ColorEdit3("light specular", glm::value_ptr(state.specular));
+    });
+
+    co_return entity;
+}
+
 constexpr std::array cube_vertices{
-    // verts                 | normals            | tex coords
+    // verts            | normals
     // front face
-    VNT{ +0.5f, +0.5f, +0.5f, +0.0f, +0.0f, +1.0f, +1.0f, +1.0f }, // top right
-    VNT{ +0.5f, -0.5f, +0.5f, +0.0f, +0.0f, +1.0f, +1.0f, +0.0f }, // bottom right
-    VNT{ -0.5f, -0.5f, +0.5f, +0.0f, +0.0f, +1.0f, +0.0f, +0.0f }, // bottom left
-    VNT{ -0.5f, +0.5f, +0.5f, +0.0f, +0.0f, +1.0f, +0.0f, +1.0f }, // top left
+    VNT{ { +0.5f, +0.5f, +0.5f }, { +0.0f, +0.0f, +1.0f }, { +1.0f, +1.0f } }, // top right
+    VNT{ { +0.5f, -0.5f, +0.5f }, { +0.0f, +0.0f, +1.0f }, { +1.0f, +0.0f } }, // bottom right
+    VNT{ { -0.5f, -0.5f, +0.5f }, { +0.0f, +0.0f, +1.0f }, { +0.0f, +0.0f } }, // bottom left
+    VNT{ { -0.5f, +0.5f, +0.5f }, { +0.0f, +0.0f, +1.0f }, { +0.0f, +1.0f } }, // top left
     // right face
-    VNT{ +0.5f, +0.5f, +0.5f, +1.0f, +0.0f, +0.0f, +1.0f, +1.0f }, // top right
-    VNT{ +0.5f, -0.5f, +0.5f, +1.0f, +0.0f, +0.0f, +1.0f, +0.0f }, // bottom right
-    VNT{ +0.5f, -0.5f, -0.5f, +1.0f, +0.0f, +0.0f, +0.0f, +0.0f }, // bottom left
-    VNT{ +0.5f, +0.5f, -0.5f, +1.0f, +0.0f, +0.0f, +0.0f, +1.0f }, // top left
+    VNT{ { +0.5f, +0.5f, +0.5f }, { +1.0f, +0.0f, +0.0f }, { +1.0f, +1.0f } }, // top right
+    VNT{ { +0.5f, -0.5f, +0.5f }, { +1.0f, +0.0f, +0.0f }, { +1.0f, +0.0f } }, // bottom right
+    VNT{ { +0.5f, -0.5f, -0.5f }, { +1.0f, +0.0f, +0.0f }, { +0.0f, +0.0f } }, // bottom left
+    VNT{ { +0.5f, +0.5f, -0.5f }, { +1.0f, +0.0f, +0.0f }, { +0.0f, +1.0f } }, // top left
     // back face
-    VNT{ +0.5f, +0.5f, -0.5f, +0.0f, +0.0f, -1.0f, +1.0f, +1.0f }, // top right
-    VNT{ +0.5f, -0.5f, -0.5f, +0.0f, +0.0f, -1.0f, +1.0f, +0.0f }, // bottom right
-    VNT{ -0.5f, -0.5f, -0.5f, +0.0f, +0.0f, -1.0f, +0.0f, +0.0f }, // bottom left
-    VNT{ -0.5f, +0.5f, -0.5f, +0.0f, +0.0f, -1.0f, +0.0f, +1.0f }, // top left
+    VNT{ { +0.5f, +0.5f, -0.5f }, { +0.0f, +0.0f, -1.0f }, { +1.0f, +1.0f } }, // top right
+    VNT{ { +0.5f, -0.5f, -0.5f }, { +0.0f, +0.0f, -1.0f }, { +1.0f, +0.0f } }, // bottom right
+    VNT{ { -0.5f, -0.5f, -0.5f }, { +0.0f, +0.0f, -1.0f }, { +0.0f, +0.0f } }, // bottom left
+    VNT{ { -0.5f, +0.5f, -0.5f }, { +0.0f, +0.0f, -1.0f }, { +0.0f, +1.0f } }, // top left
     // left face
-    VNT{ -0.5f, +0.5f, -0.5f, -1.0f, +0.0f, +0.0f, +1.0f, +1.0f }, // top right
-    VNT{ -0.5f, -0.5f, -0.5f, -1.0f, +0.0f, +0.0f, +1.0f, +0.0f }, // bottom right
-    VNT{ -0.5f, -0.5f, +0.5f, -1.0f, +0.0f, +0.0f, +0.0f, +0.0f }, // bottom left
-    VNT{ -0.5f, +0.5f, +0.5f, -1.0f, +0.0f, +0.0f, +0.0f, +1.0f }, // top left
+    VNT{ { -0.5f, +0.5f, -0.5f }, { -1.0f, +0.0f, +0.0f }, { +1.0f, +1.0f } }, // top right
+    VNT{ { -0.5f, -0.5f, -0.5f }, { -1.0f, +0.0f, +0.0f }, { +1.0f, +0.0f } }, // bottom right
+    VNT{ { -0.5f, -0.5f, +0.5f }, { -1.0f, +0.0f, +0.0f }, { +0.0f, +0.0f } }, // bottom left
+    VNT{ { -0.5f, +0.5f, +0.5f }, { -1.0f, +0.0f, +0.0f }, { +0.0f, +1.0f } }, // top left
     // top face
-    VNT{ +0.5f, +0.5f, +0.5f, +0.0f, +1.0f, +0.0f, +1.0f, +1.0f }, // top right
-    VNT{ +0.5f, +0.5f, -0.5f, +0.0f, +1.0f, +0.0f, +1.0f, +0.0f }, // bottom right
-    VNT{ -0.5f, +0.5f, -0.5f, +0.0f, +1.0f, +0.0f, +0.0f, +0.0f }, // bottom left
-    VNT{ -0.5f, +0.5f, +0.5f, +0.0f, +1.0f, +0.0f, +0.0f, +1.0f }, // top left
+    VNT{ { +0.5f, +0.5f, +0.5f }, { +0.0f, +1.0f, +0.0f }, { +1.0f, +1.0f } }, // top right
+    VNT{ { +0.5f, +0.5f, -0.5f }, { +0.0f, +1.0f, +0.0f }, { +1.0f, +0.0f } }, // bottom right
+    VNT{ { -0.5f, +0.5f, -0.5f }, { +0.0f, +1.0f, +0.0f }, { +0.0f, +0.0f } }, // bottom left
+    VNT{ { -0.5f, +0.5f, +0.5f }, { +0.0f, +1.0f, +0.0f }, { +0.0f, +1.0f } }, // top left
     // bottom face
-    VNT{ +0.5f, -0.5f, +0.5f, +0.0f, -1.0f, +0.0f, +1.0f, +1.0f }, // top right
-    VNT{ +0.5f, -0.5f, -0.5f, +0.0f, -1.0f, +0.0f, +1.0f, +0.0f }, // bottom right
-    VNT{ -0.5f, -0.5f, -0.5f, +0.0f, -1.0f, +0.0f, +0.0f, +0.0f }, // bottom left
-    VNT{ -0.5f, -0.5f, +0.5f, +0.0f, -1.0f, +0.0f, +0.0f, +1.0f }, // top left
+    VNT{ { +0.5f, -0.5f, +0.5f }, { +0.0f, -1.0f, +0.0f }, { +1.0f, +1.0f } }, // top right
+    VNT{ { +0.5f, -0.5f, -0.5f }, { +0.0f, -1.0f, +0.0f }, { +1.0f, +0.0f } }, // bottom right
+    VNT{ { -0.5f, -0.5f, -0.5f }, { +0.0f, -1.0f, +0.0f }, { +0.0f, +0.0f } }, // bottom left
+    VNT{ { -0.5f, -0.5f, +0.5f }, { +0.0f, -1.0f, +0.0f }, { +0.0f, +1.0f } }, // top left
 };
-#pragma GCC diagnostic pop
 
-constexpr std::array indices{
+constexpr std::array cube_indices{
     0u,  1u,  3u,  1u,  2u,  3u, // Front face
     4u,  5u,  7u,  5u,  6u,  7u, // Right face
     8u,  9u,  11u, 9u,  10u, 11u, // Back face
@@ -172,287 +477,189 @@ constexpr std::array indices{
     20u, 21u, 23u, 21u, 22u, 23u, // Bottom face
 };
 
-struct render_object {
-    glm::vec3 position;
-    struct material {
-        // diffuse, specular, emission
-        std::array<gfx::texture, 3> textures;
-        float shininess;
-    };
-    material material;
+struct PM {
+    glm::vec3 pos;
+    material mat;
 };
 
-struct light {
-    glm::vec3 position;
-    glm::vec3 ambient;
-    glm::vec3 diffuse;
-    glm::vec3 specular;
-};
+exec::async<std::vector<entt::entity>>
+    create_cube_entities(script::example_context& example_ctx, ecs::layer& layer, const game::basis& world) {
+    std::vector<entt::entity> entities;
 
-struct keys_input_state {
-    sl::meta::dirty<bool> esc{ false };
-    sl::meta::dirty<bool> q{ false };
-    sl::meta::dirty<bool> w{ false };
-    sl::meta::dirty<bool> e{ false };
-    sl::meta::dirty<bool> a{ false };
-    sl::meta::dirty<bool> s{ false };
-    sl::meta::dirty<bool> d{ false };
-};
+    const auto object_shader_id = "object.shader"_us(example_ctx.uss);
+    const auto cube_vertex_id = "cube.vertex"_us(example_ctx.uss);
 
-struct mouse_input_state {
-    sl::meta::dirty<bool> right{ false };
-};
-
-struct cursor_input_state {
-    sl::meta::dirty<glm::dvec2> last;
-    sl::meta::dirty<glm::dvec2> curr;
-};
-
-int main(int argc, char** argv) {
-    const rt::context rt_ctx{ argc, argv };
-    const auto root = rt_ctx.path().parent_path();
-
-    spdlog::set_level(spdlog::level::info);
-
-    game::graphics graphics =
-        *ASSERT_VAL(game::graphics::initialize("03_lightmap", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f }));
-
-    keys_input_state kis;
-    (void)graphics.window->key_cb.connect([&kis](int key, int /* scancode */, int action, int /* mods */) {
-        const bool is_pressed = action == GLFW_PRESS || action == GLFW_REPEAT;
-        switch (key) {
-        case GLFW_KEY_ESCAPE:
-            kis.esc.set(is_pressed);
-            break;
-        case GLFW_KEY_Q:
-            kis.q.set(is_pressed);
-            break;
-        case GLFW_KEY_W:
-            kis.w.set(is_pressed);
-            break;
-        case GLFW_KEY_E:
-            kis.e.set(is_pressed);
-            break;
-        case GLFW_KEY_A:
-            kis.a.set(is_pressed);
-            break;
-        case GLFW_KEY_S:
-            kis.s.set(is_pressed);
-            break;
-        case GLFW_KEY_D:
-            kis.d.set(is_pressed);
-            break;
-        }
-    });
-
-    mouse_input_state mis;
-    (void)graphics.window->mouse_button_cb.connect([&mis](int button, int action, int mods [[maybe_unused]]) {
-        if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-            mis.right.set(action == GLFW_PRESS || action == GLFW_REPEAT);
-        }
-    });
-
-    cursor_input_state cis;
-    (void)graphics.window->cursor_pos_cb.connect([&cis](glm::dvec2 cursor_pos) { cis.curr.set(cursor_pos); });
-
-    constexpr auto calculate_tr = [](const keys_input_state& kis) {
-        constexpr auto sub = [](bool a, bool b) {
-            return static_cast<float>(static_cast<int>(a) - static_cast<int>(b));
-        };
-        constexpr gfx::basis local;
-        return sub(kis.e.get(), kis.q.get()) * local.up() + //
-               sub(kis.d.get(), kis.a.get()) * local.right() + //
-               sub(kis.w.get(), kis.s.get()) * local.forward();
-    };
-
-    constexpr auto calculate_cursor_offset = [](const mouse_input_state& mis,
-                                                cursor_input_state& cis) -> tl::optional<glm::dvec2> {
-        if (!mis.right.get()) {
-            cis.curr.then([&cis](glm::dvec2 curr) { cis.last.set(curr); });
-            return tl::nullopt;
-        }
-        return cis.curr
-            .then([&cis](const glm::dvec2& curr) {
-                auto offset = cis.last.then([&curr](const glm::dvec2& last) { return curr - last; });
-                cis.last.set(curr);
-                return offset;
-            })
-            .value_or(tl::nullopt);
-    };
-
-    constexpr auto camera_update = [](gfx::camera& camera,
-                                      std::chrono::duration<float> delta_time,
-                                      const glm::vec3& tr,
-                                      const tl::optional<glm::dvec2>& maybe_cursor_offset) {
-        maybe_cursor_offset.map([&camera](const glm::dvec2& cursor_offset) {
-            constexpr float sensitivity = -glm::radians(0.1f);
-            const float yaw = static_cast<float>(cursor_offset.x) * sensitivity;
-            const float pitch = static_cast<float>(cursor_offset.y) * sensitivity;
-
-            constexpr gfx::basis local;
-            const glm::quat rot_yaw = glm::angleAxis(yaw, local.y);
-            camera.tf.rotate(rot_yaw);
-
-            const glm::vec3 camera_forward = camera.tf.rot * local.forward();
-            const glm::vec3 camera_right = glm::cross(camera_forward, local.up());
-            const glm::quat rot_pitch = glm::angleAxis(pitch, camera_right);
-            camera.tf.rotate(rot_pitch);
-        });
-
-        constexpr float camera_acc = 2.5f;
-        const float camera_speed = camera_acc * delta_time.count();
-        camera.tf.translate(camera_speed * (camera.tf.rot * tr));
-    };
-
-    // prepare render
-    game::render render{
-        graphics,
-        gfx::perspective_projection{
-            .fov = glm::radians(45.0f),
-            .near = 0.1f,
-            .far = 100.0f,
-        },
-    };
-    render.camera.tf = gfx::transform{
-        .tr = glm::vec3{ 0.0f, 0.0f, 3.0f },
-        .rot = glm::angleAxis(glm::radians(-180.0f), render.world.up()),
-    };
-
-    auto object_shader = create_object_shader(root);
-    const auto object_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
-
-    // TODO: many lights?
-    const auto source_shader = create_source_shader(root);
-    const auto source_buffers = create_buffers(std::span{ cube_vertices }, std::span{ indices });
+    auto& tex_resource = layer.registry.get<ecs::resource<game::texture>::ptr_type>(layer.root);
+    meta::persistent<game::texture> tex_diffuse =
+        *ASSERT_VAL(tex_resource->lookup_unsafe("texture.diffuse"_us(example_ctx.uss)));
+    meta::persistent<game::texture> tex_specular =
+        *ASSERT_VAL(tex_resource->lookup_unsafe("texture.specular"_us(example_ctx.uss)));
+    meta::persistent<game::texture> tex_emission =
+        *ASSERT_VAL(tex_resource->lookup_unsafe("texture.emission"_us(example_ctx.uss)));
 
     std::array cube_objects{
-        render_object{
-            .position{ 0.0f, 0.0f, 0.0f },
-            .material{
-                .textures{
-                    create_texture(root / "textures/03_lightmap_diffuse.png"),
-                    create_texture(root / "textures/03_lightmap_specular.png"),
-                    create_texture(root / "textures/03_lightmap_emission.jpg"),
-                },
+        PM{
+            .pos{ 0.0f, 0.0f, 0.0f },
+            .mat{
+                .diffuse = tex_diffuse,
+                .specular = tex_specular,
+                .emission = tex_emission,
                 .shininess = 128.0f * 0.6f,
             },
         },
-        render_object{
-            .position{ 5.0f, 0.0f, 0.0f },
-            .material{
-                .textures{
-                    create_texture(root / "textures/03_lightmap_diffuse.png"),
-                    create_texture(root / "textures/03_lightmap_specular.png"),
-                    create_texture(root / "textures/03_lightmap_emission.jpg"),
-                },
+        PM{
+            .pos{ 5.0f, 0.0f, 0.0f },
+            .mat{
+                .diffuse = tex_diffuse,
+                .specular = tex_specular,
+                .emission = tex_emission,
                 .shininess = 32.0f,
             },
         },
     };
 
-    light light{
-        .position{ 2.0f, 2.0f, -3.0f },
-        .ambient{ 0.2f, 0.2f, 0.2f },
-        .diffuse{ 0.5f, 0.5f, 0.5f },
-        .specular{ 1.0f, 1.0f, 1.0f },
-    };
+    for (const auto& [pos, mat] : cube_objects) {
+        entt::entity entity = layer.registry.create();
 
-    rt::time time;
-
-    while (!graphics.current_window.should_close()) {
-        // input
-        graphics.context->poll_events();
-
-        // process input
-        graphics.state->frame_buffer_size.then([&cw = graphics.current_window](glm::ivec2 frame_buffer_size) {
-            cw.viewport(glm::ivec2{}, frame_buffer_size);
-        });
-        graphics.state->window_content_scale.then([](glm::fvec2 window_content_scale) {
-            ImGui::GetStyle().ScaleAllSizes(window_content_scale.x);
-        });
-        kis.esc.then([&cw = graphics.current_window](bool esc) { cw.set_should_close(esc); });
-        mis.right.then([&cw = graphics.current_window](bool right) {
-            cw.set_input_mode(GLFW_CURSOR, right ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-        });
-
-        // update
-        const rt::time_point time_point = time.calculate();
-        const auto tr = calculate_tr(kis);
-        const auto maybe_cursor_offset = calculate_cursor_offset(mis, cis);
-        camera_update(render.camera, time_point.delta_sec(), tr, maybe_cursor_offset);
-
-        // render
-        auto bound_render = render.bind(graphics.current_window, *graphics.state);
-
-        // source
-        {
-            const auto& [vb, eb, va] = source_buffers;
-            const auto& [sp, set_transform, set_light_color] = source_shader;
-
-            const auto bound_sp = sp.bind();
-            const auto bound_va = va.bind();
-
-            set_light_color(bound_sp, light.ambient.r, light.ambient.g, light.ambient.b);
-            const glm::mat4 model = glm::translate(glm::mat4(1.0f), light.position);
-            const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-            set_transform(bound_sp, glm::value_ptr(transform));
-            gfx::draw{ bound_sp, bound_va }.elements(eb);
-        }
-
-        // objects
-        {
-            auto bound_sp = object_shader.sp.bind();
-            object_shader.light.set_position(bound_sp, light.position.x, light.position.y, light.position.z);
-            object_shader.light.set_ambient(bound_sp, light.ambient.r, light.ambient.g, light.ambient.b);
-            object_shader.light.set_diffuse(bound_sp, light.diffuse.r, light.diffuse.g, light.diffuse.b);
-            object_shader.light.set_specular(bound_sp, light.specular.r, light.specular.g, light.specular.b);
-            const auto& view_position = render.camera.tf.tr;
-            object_shader.set_view_pos(bound_sp, view_position.x, view_position.y, view_position.z);
-            object_shader.set_time(bound_sp, time_point.now_sec().count());
-
-            for (const auto& [position, material] : cube_objects) {
-                const auto& [vb, eb, va] = object_buffers;
-                const auto bound_va = va.bind();
-                const auto bound_texs = gfx::activate_textures(material.textures);
-                gfx::draw draw{ bound_sp, bound_va, bound_texs };
-
-                object_shader.material.set_shininess(bound_sp, material.shininess);
-
-                const auto make_model =
-                    sl::meta::pipeline{} //
-                        .then([&p = position](auto x) { return glm::translate(x, p); })
-                        .then([&render](auto x) { return glm::rotate(x, glm::radians(60.0f), render.world.up()); });
-                const auto make_it_model = sl::meta::pipeline{} //
-                                               .then(SL_META_LIFT(glm::inverse))
-                                               .then(SL_META_LIFT(glm::transpose));
-
-                const glm::mat4 model = make_model(glm::mat4(1.0f));
-                const glm::mat3 it_model = make_it_model(model);
-                const glm::mat4 transform = bound_render.projection * bound_render.view * model;
-                object_shader.set_model(bound_sp, glm::value_ptr(model));
-                object_shader.set_it_model(bound_sp, glm::value_ptr(it_model));
-                object_shader.set_transform(bound_sp, glm::value_ptr(transform));
-                draw.elements(eb);
+        layer.registry.emplace<game::shader::id>(entity, object_shader_id);
+        layer.registry.emplace<game::vertex::id>(entity, cube_vertex_id);
+        layer.registry.emplace<game::local_transform>(
+            entity,
+            game::transform{
+                .tr = pos,
+                .rot = glm::angleAxis(0.0f, world.up()),
             }
-        }
-
-        // overlay
-        auto imgui_frame = graphics.imgui.new_frame();
-        if (const auto imgui_window = imgui_frame.begin("light")) {
-            ImGui::SliderFloat3("light position", glm::value_ptr(light.position), -10.0f, 10.0f);
-            ImGui::ColorEdit3("light ambient", glm::value_ptr(light.ambient));
-            ImGui::ColorEdit3("light diffuse", glm::value_ptr(light.diffuse));
-            ImGui::ColorEdit3("light specular", glm::value_ptr(light.specular));
-
-            int i = 0;
-            for (auto& [_, material] : cube_objects) {
-                ImGui::PushID(i++);
-                ImGui::Spacing();
-                ImGui::SliderFloat("shininess", &material.shininess, 2.0f, 256, "%.0f", ImGuiSliderFlags_Logarithmic);
-                ImGui::PopID();
+        );
+        layer.registry.emplace<material>(entity, mat);
+        layer.registry.emplace<game::update>(
+            entity,
+            [&world](ecs::layer& layer, entt::entity entity, game::time_point time_point) {
+                const float t = time_point.now_sec().count();
+                const float angle_v = 2.f;
+                const float angle = angle_v * t;
+                auto& local_tf = layer.registry.get<game::local_transform>(entity);
+                local_tf.set(game::transform{
+                    .tr = local_tf.get()->tr,
+                    .rot = glm::angleAxis(glm::radians(angle), world.up()),
+                });
             }
-        }
+        );
+        layer.registry.emplace<game::overlay>(entity, [](ecs::layer& layer, gfx::imgui_frame&, entt::entity entity) {
+            auto* maybe_material = layer.registry.try_get<material>(entity);
+            if (!ASSERT_VAL(maybe_material)) {
+                return;
+            }
+            auto& a_material = *maybe_material;
+
+            ImGui::PushID(static_cast<int>(entity));
+            ImGui::Spacing();
+            ImGui::SliderFloat("shininess", &a_material.shininess, 2.0f, 256, "%.0f", ImGuiSliderFlags_Logarithmic);
+            ImGui::PopID();
+        });
+
+        entities.push_back(entity);
     }
 
+    co_return entities;
+}
+
+exec::async<void> create_scene(
+    game::engine_context& e_ctx,
+    script::example_context& example_ctx,
+    ecs::layer& layer,
+    const game::basis& world
+) {
+    auto [global_entity, shader_resource, vertex_resource, texture_resource] =
+        co_await create_global_entity(e_ctx, layer);
+    // common vvv
+    std::ignore =
+        co_await shader_resource.require("object.shader"_us(example_ctx.uss), create_object_shader(example_ctx));
+    std::ignore =
+        co_await shader_resource.require("source.shader"_us(example_ctx.uss), create_source_shader(example_ctx));
+    std::ignore = co_await vertex_resource.require(
+        "cube.vertex"_us(example_ctx.uss), script::create_vertex(std::span(cube_vertices), std::span(cube_indices))
+    );
+    ASSERT(co_await texture_resource.require(
+        "texture.diffuse"_us(example_ctx.uss),
+        script::create_texture(example_ctx.examples_path / "textures/03_lightmap_diffuse.png")
+    ));
+    ASSERT(co_await texture_resource.require(
+        "texture.specular"_us(example_ctx.uss),
+        script::create_texture(example_ctx.examples_path / "textures/03_lightmap_specular.png")
+    ));
+    ASSERT(co_await texture_resource.require(
+        "texture.emission"_us(example_ctx.uss),
+        script::create_texture(example_ctx.examples_path / "textures/03_lightmap_emission.jpg")
+    ));
+    // common ^^^
+
+    const auto player_entity = co_await create_player_entity(e_ctx, layer, world);
+    game::node::attach_child(layer, global_entity, player_entity);
+
+    const auto source_entity = co_await create_source_entity(example_ctx, layer, world);
+    game::node::attach_child(layer, global_entity, source_entity);
+
+    const auto cube_entities = co_await create_cube_entities(example_ctx, layer, world);
+    game::node::attach_children(layer, global_entity, std::span{ cube_entities });
+}
+
+void main(int argc, char** argv) {
+    auto a_logger = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    game::logger().set_level(spdlog::level::debug);
+    game::logger().sinks().push_back(a_logger);
+    gfx::logger().set_level(spdlog::level::debug);
+    gfx::logger().sinks().push_back(a_logger);
+
+    auto w_ctx = *ASSERT_VAL(
+        game::window_context::initialize(sl::meta::null, "03_lightmap", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f })
+    );
+    auto e_ctx = game::engine_context::initialize(std::move(w_ctx), argc, argv);
+    auto example_ctx = script::example_context::create(e_ctx);
+    ecs::layer layer{};
+    game::graphics_system gfx_system{ .layer = layer, .world{} };
+    game::overlay_system overlay_system{ .layer = layer };
+
+    exec::coro_schedule(*e_ctx.script_exec, create_scene(e_ctx, example_ctx, layer, gfx_system.world));
+
+    while (!e_ctx.w_ctx.current_window.should_close()) {
+        // input
+        e_ctx.w_ctx.context->poll_events();
+        e_ctx.w_ctx.state->frame_buffer_size.release().map( //
+            [&cw = e_ctx.w_ctx.current_window](const glm::ivec2& frame_buffer_size) {
+                cw.viewport(glm::ivec2{}, frame_buffer_size);
+            }
+        );
+        e_ctx.w_ctx.state->window_content_scale
+            .release() //
+            .map([&overlay_system](const glm::fvec2& window_content_scale) {
+                overlay_system.on_window_content_scale_changed(window_content_scale);
+            });
+        e_ctx.in_sys->process(layer);
+
+        const game::time_point& time_point = e_ctx.time_calculate();
+
+        // update and execute scripts
+        std::ignore = e_ctx.script_exec->execute_batch();
+        game::update_system(layer, time_point);
+
+        // transform update
+        game::local_transform_system(layer, time_point);
+
+        // render
+        const auto window_frame = e_ctx.w_ctx.new_frame();
+        gfx_system.execute(window_frame);
+
+        // overlay
+        auto imgui_frame = e_ctx.w_ctx.imgui.new_frame();
+        if (auto imgui_window = imgui_frame.begin("entities")) {
+            overlay_system.execute(imgui_frame);
+        }
+    }
+}
+
+} // namespace sl
+
+int main(int argc, char** argv) {
+    sl::main(argc, argv);
     return 0;
 }
