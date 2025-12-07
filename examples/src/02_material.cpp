@@ -83,7 +83,7 @@ exec::async<game::shader> create_source_shader(const script::example_context& ex
                     const auto [state, tf] = layer.registry.try_get<source_entity_state, game::transform>(entity);
 
                     if (state) {
-                        set_light_color(bound_sp, state->ambient.r, state->ambient.g, state->ambient.b);
+                        set_light_color(bound_sp, state->ambient);
                     }
 
                     if (tf) {
@@ -91,7 +91,7 @@ exec::async<game::shader> create_source_shader(const script::example_context& ex
                         const glm::mat4 rotation_matrix = glm::mat4_cast(tf->rot);
                         const glm::mat4 model = translation_matrix * rotation_matrix;
                         const glm::mat4 transform = camera_frame.projection * camera_frame.view * model;
-                        set_transform(bound_sp, glm::value_ptr(transform));
+                        set_transform(bound_sp, transform);
                     }
 
                     vertex_draw(draw);
@@ -149,17 +149,14 @@ exec::async<game::shader> create_object_shader(const script::example_context& ex
                     const game::camera_frame& camera_frame,
                     const gfx::bound_shader_program& bound_sp
                 ) mutable {
-            {
-                const auto& tr = camera_frame.position;
-                set_view_pos(bound_sp, tr.x, tr.y, tr.z);
-            }
+            set_view_pos(bound_sp, camera_frame.position);
 
             for (auto [source_entity, source_state, tf] :
                  layer.registry.view<source_entity_state, game::transform>().each()) {
-                set_light_position(bound_sp, tf.tr.x, tf.tr.y, tf.tr.z);
-                set_light_ambient(bound_sp, source_state.ambient.r, source_state.ambient.g, source_state.ambient.b);
-                set_light_diffuse(bound_sp, source_state.diffuse.r, source_state.diffuse.g, source_state.diffuse.b);
-                set_light_specular(bound_sp, source_state.specular.r, source_state.specular.g, source_state.specular.b);
+                set_light_position(bound_sp, tf.tr);
+                set_light_ambient(bound_sp, source_state.ambient);
+                set_light_diffuse(bound_sp, source_state.diffuse);
+                set_light_specular(bound_sp, source_state.specular);
             }
 
             return [&](const gfx::bound_vertex_array& bound_va,
@@ -182,15 +179,13 @@ exec::async<game::shader> create_object_shader(const script::example_context& ex
                     const glm::mat4 model = translation_matrix * rotation_matrix;
                     const glm::mat3 it_model = glm::transpose(glm::inverse(model));
                     const glm::mat4 transform = camera_frame.projection * camera_frame.view * model;
-                    set_model(bound_sp, glm::value_ptr(model));
-                    set_it_model(bound_sp, glm::value_ptr(it_model));
-                    set_transform(bound_sp, glm::value_ptr(transform));
+                    set_model(bound_sp, model);
+                    set_it_model(bound_sp, it_model);
+                    set_transform(bound_sp, transform);
 
-                    set_material_ambient(bound_sp, a_material.ambient.r, a_material.ambient.g, a_material.ambient.b);
-                    set_material_diffuse(bound_sp, a_material.diffuse.r, a_material.diffuse.g, a_material.diffuse.b);
-                    set_material_specular(
-                        bound_sp, a_material.specular.r, a_material.specular.g, a_material.specular.b
-                    );
+                    set_material_ambient(bound_sp, a_material.ambient);
+                    set_material_diffuse(bound_sp, a_material.diffuse);
+                    set_material_specular(bound_sp, a_material.specular);
                     set_material_shininess(bound_sp, a_material.shininess);
 
                     vertex_draw(draw);

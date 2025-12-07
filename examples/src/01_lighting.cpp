@@ -407,19 +407,16 @@ exec::async<game::shader> create_object_shader(const script::example_context& ex
                     const game::camera_frame& camera_frame,
                     const gfx::bound_shader_program& bound_sp
                 ) mutable {
-            {
-                const auto& tr = camera_frame.position;
-                set_view_pos(bound_sp, tr.x, tr.y, tr.z);
-            }
+            set_view_pos(bound_sp, camera_frame.position);
 
             for (auto [source_entity, source_state, tf] :
                  layer.registry.view<source_entity_state, game::transform>().each()) {
-                set_light_color(bound_sp, source_state.color.r, source_state.color.g, source_state.color.b);
+                set_light_color(bound_sp, source_state.color);
                 set_ambient_strength(bound_sp, source_state.ambient_strength);
                 set_specular_strength(bound_sp, source_state.specular_strength);
                 set_shininess(bound_sp, source_state.shininess);
 
-                set_light_pos(bound_sp, tf.tr.x, tf.tr.y, tf.tr.z);
+                set_light_pos(bound_sp, tf.tr);
             }
 
             return [&](const gfx::bound_vertex_array& bound_va,
@@ -442,11 +439,11 @@ exec::async<game::shader> create_object_shader(const script::example_context& ex
                     const glm::mat4 model = translation_matrix * rotation_matrix;
                     const glm::mat3 it_model = glm::transpose(glm::inverse(model));
                     const glm::mat4 transform = camera_frame.projection * camera_frame.view * model;
-                    set_model(bound_sp, glm::value_ptr(model));
-                    set_it_model(bound_sp, glm::value_ptr(it_model));
-                    set_transform(bound_sp, glm::value_ptr(transform));
+                    set_model(bound_sp, model);
+                    set_it_model(bound_sp, it_model);
+                    set_transform(bound_sp, transform);
 
-                    set_object_color(bound_sp, color.r, color.g, color.b);
+                    set_object_color(bound_sp, color);
 
                     vertex_draw(draw);
                 }
@@ -487,7 +484,7 @@ exec::async<game::shader> create_source_shader(const script::example_context& ex
                     const auto [state, tf] = layer.registry.try_get<source_entity_state, game::transform>(entity);
 
                     if (state) {
-                        set_light_color(bound_sp, state->color.r, state->color.g, state->color.b);
+                        set_light_color(bound_sp, state->color);
                     }
 
                     if (tf) {
@@ -495,7 +492,7 @@ exec::async<game::shader> create_source_shader(const script::example_context& ex
                         const glm::mat4 rotation_matrix = glm::mat4_cast(tf->rot);
                         const glm::mat4 model = translation_matrix * rotation_matrix;
                         const glm::mat4 transform = camera_frame.projection * camera_frame.view * model;
-                        set_transform(bound_sp, glm::value_ptr(transform));
+                        set_transform(bound_sp, transform);
                     }
 
                     vertex_draw(draw);
