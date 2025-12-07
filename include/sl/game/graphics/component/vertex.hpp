@@ -28,16 +28,16 @@ struct texture {
 public:
     gfx::texture tex;
 };
+using texture_or_color = std::variant<meta::persistent<texture>, glm::vec4>;
 
 struct material {
     struct id {
         meta::unique_string id;
     };
-    using tex_or_clr = std::variant<meta::persistent<texture>, glm::vec4>;
 
 public:
-    tex_or_clr diffuse;
-    tex_or_clr specular;
+    texture_or_color diffuse;
+    texture_or_color specular;
     float shininess;
 };
 
