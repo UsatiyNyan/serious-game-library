@@ -3,12 +3,6 @@
 //
 
 #include "common.hpp"
-#include "sl/game/graphics/component/overlay.hpp"
-#include "sl/game/graphics/component/transform.hpp"
-#include "sl/game/graphics/system/overlay.hpp"
-#include "sl/game/graphics/system/render.hpp"
-#include <sl/gfx/vtx/texture.hpp>
-#include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace sl {
 

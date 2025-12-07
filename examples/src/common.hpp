@@ -20,6 +20,7 @@
 
 #include <libassert/assert.hpp>
 #include <range/v3/view.hpp>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
 using sl::meta::operator""_us;

@@ -3,10 +3,6 @@
 //
 
 #include "common.hpp"
-#include "sl/game/graphics/component/overlay.hpp"
-#include "sl/game/graphics/component/transform.hpp"
-#include "sl/game/graphics/system/overlay.hpp"
-#include "sl/game/graphics/system/render.hpp"
 
 namespace sl {
 
