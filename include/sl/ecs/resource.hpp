@@ -52,8 +52,9 @@ public: // behaviour
     //
     // override_after_load - will override value by given id in storage, even if it has somehow appeared in the storage
     // during load
+    template <typename LoaderT>
     exec::async<meta::maybe<reference_type>>
-        require(meta::unique_string id, auto loader, bool override_after_load = true) & {
+        require(meta::unique_string id, LoaderT loader, bool override_after_load = true) & {
         using exec::operator co_await;
 
         {
@@ -82,7 +83,14 @@ public: // behaviour
         }
 
         // loader context
-        meta::maybe<T> maybe_loaded_value = co_await std::move(loader);
+        meta::maybe<T> maybe_loaded_value;
+        if constexpr (exec::SomeSignal<LoaderT>) {
+            if (auto result_loaded_value = co_await std::move(loader)) {
+                maybe_loaded_value.emplace(std::move(result_loaded_value).value());
+            }
+        } else {
+            maybe_loaded_value = co_await std::move(loader);
+        }
 
         exec::mutex_lock lock = (co_await mutex_.lock()).value();
         meta::maybe<reference_type> maybe_reference =
