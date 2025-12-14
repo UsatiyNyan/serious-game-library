@@ -12,11 +12,11 @@ cpmaddpackage(
 cpmaddpackage(
         NAME serious-runtime-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-runtime-library.git"
-        GIT_TAG main)
+        GIT_TAG 0.0.0)
 cpmaddpackage(
         NAME serious-graphics-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-graphics-library.git"
-        GIT_TAG main)
+        GIT_TAG 0.0.0)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/boost.cmake")
 
