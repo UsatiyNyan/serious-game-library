@@ -4,22 +4,26 @@
 
 #pragma once
 
-#include "sl/ecs/layer.hpp"
-#include "sl/game/graphics/system/render.hpp"
-
-#include "sl/gfx/vtx/buffer.hpp"
-
 #include "sl/game/detail/log.hpp"
+#include "sl/game/graphics/component/basis.hpp"
+
+#include <sl/ecs/layer.hpp>
+#include <sl/gfx/vtx/buffer.hpp>
+#include <sl/meta/monad/maybe.hpp>
 
 #include <libassert/assert.hpp>
 
 namespace sl::game {
 
 template <typename SSBOElementT>
-concept SSBOElement =
-    requires(const ecs::layer& layer, basis world, entt::entity entity, typename SSBOElementT::component_type component) {
-        { SSBOElementT::from(layer, world, entity, component) } -> std::same_as<SSBOElementT>;
-    };
+concept SSBOElement = requires(
+    const ecs::layer& layer,
+    basis world,
+    entt::entity entity,
+    typename SSBOElementT::component_type component
+) {
+    { SSBOElementT::from(layer, world, entity, component) } -> std::same_as<meta::maybe<SSBOElementT>>;
+};
 
 template <SSBOElement SSBOElementT, gfx::buffer_usage buffer_usage = gfx::buffer_usage::dynamic_draw>
 [[nodiscard]] gfx::buffer<SSBOElementT, gfx::buffer_type::shader_storage, buffer_usage>
@@ -43,13 +47,16 @@ template <SSBOElement SSBOElementT, gfx::buffer_usage buffer_usage>
     std::uint32_t size_counter = 0;
     auto view = layer.registry.template view<typename SSBOElementT::component_type>();
     for (const auto& [entity, component] : view.each()) {
-        const bool enough_capacity = size_counter < mapped_ssbo_data.size();
-        if (!ASSUME_VAL(enough_capacity, mapped_ssbo_data.size())) {
+        if (const bool enough_capacity = size_counter < mapped_ssbo_data.size();
+            !ASSUME_VAL(enough_capacity, mapped_ssbo_data.size())) {
             log::warn("exceeded limit of {} = {}", typeid(SSBOElementT).name(), mapped_ssbo_data.size());
             break;
         }
-        mapped_ssbo_data[size_counter] = SSBOElementT::from(layer, world, entity, component);
-        ++size_counter;
+
+        if (auto maybe_element = SSBOElementT::from(layer, world, entity, component); maybe_element.has_value()) {
+            mapped_ssbo_data[size_counter] = std::move(maybe_element).value();
+            ++size_counter;
+        }
     }
     return size_counter;
 };

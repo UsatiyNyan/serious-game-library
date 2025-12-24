@@ -43,11 +43,14 @@ struct spot_light {
 struct directional_light_element {
     using component_type = directional_light;
 
-    [[nodiscard]] static auto
+    [[nodiscard]] static meta::maybe<directional_light_element>
         from(const ecs::layer& layer, const basis& world, entt::entity entity, const component_type& component) {
-        const auto& tf = *ASSERT_VAL(layer.registry.template try_get<transform>(entity));
+        const auto* maybe_tf = layer.registry.template try_get<transform>(entity);
+        if (maybe_tf == nullptr) {
+            return meta::null;
+        }
         return directional_light_element{
-            .direction = world.direction(tf),
+            .direction = world.direction(*maybe_tf),
             .ambient = component.ambient,
             .diffuse = component.diffuse,
             .specular = component.specular,
@@ -65,11 +68,14 @@ public:
 struct point_light_element {
     using component_type = point_light;
 
-    [[nodiscard]] static auto
+    [[nodiscard]] static meta::maybe<point_light_element>
         from(const ecs::layer& layer, const basis&, entt::entity entity, const component_type& component) {
-        const auto& tf = *ASSERT_VAL(layer.registry.template try_get<transform>(entity));
+        const auto* maybe_tf = layer.registry.template try_get<transform>(entity);
+        if (maybe_tf == nullptr) {
+            return meta::null;
+        }
         return point_light_element{
-            .position = tf.tr,
+            .position = maybe_tf->tr,
             .ambient = component.ambient,
             .diffuse = component.diffuse,
             .specular = component.specular,
@@ -94,9 +100,13 @@ public:
 struct spot_light_element {
     using component_type = spot_light;
 
-    [[nodiscard]] static auto
+    [[nodiscard]] static meta::maybe<spot_light_element>
         from(const ecs::layer& layer, const basis& world, entt::entity entity, const component_type& component) {
-        const auto& tf = *ASSERT_VAL(layer.registry.template try_get<transform>(entity));
+        const auto* maybe_tf = layer.registry.template try_get<transform>(entity);
+        if (maybe_tf == nullptr) {
+            return meta::null;
+        }
+        const auto& tf = *maybe_tf;
         return spot_light_element{
             .position = tf.tr,
             .direction = world.direction(tf),
