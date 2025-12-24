@@ -9,6 +9,7 @@
 #include "sl/game/time.hpp"
 
 #include <sl/exec/algo/sched/manual.hpp>
+#include <sl/exec/algo/sync/serial.hpp>
 #include <sl/exec/coro/async.hpp>
 #include <sl/meta/monad/maybe.hpp>
 #include <sl/rt/context.hpp>
@@ -32,6 +33,7 @@ public:
     std::unique_ptr<input_system> in_sys;
 
     std::unique_ptr<exec::manual_executor> script_exec;
+    std::unique_ptr<exec::serial_executor<>> sync_exec;
 
     time time;
     meta::maybe<time_point> maybe_time_point;

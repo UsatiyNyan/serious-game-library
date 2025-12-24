@@ -13,12 +13,15 @@ engine_context engine_context::initialize(window_context&& w_ctx, int argc, char
     rt::context rt_ctx{ argc, argv };
     auto root_path = rt_ctx.path().parent_path();
     auto in_sys = std::make_unique<input_system>(*w_ctx.window);
+    auto script_exec = std::make_unique<exec::manual_executor>();
+    auto sync_exec = std::make_unique<exec::serial_executor<>>(*script_exec);
     return engine_context{
         .rt_ctx = std::move(rt_ctx),
         .root_path = root_path,
         .w_ctx = std::move(w_ctx),
         .in_sys = std::move(in_sys),
-        .script_exec = std::make_unique<exec::manual_executor>(),
+        .script_exec = std::move(script_exec),
+        .sync_exec = std::move(sync_exec),
         .time{},
         .maybe_time_point{},
     };

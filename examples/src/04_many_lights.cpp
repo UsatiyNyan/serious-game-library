@@ -244,25 +244,6 @@ exec::async<entt::entity>
 
     layer.registry.emplace<global_entity_state>(entity);
 
-    ASSERT(layer.registry.emplace<ecs::resource<game::shader>::ptr_type>(
-        entity, ecs::resource<game::shader>::make(*e_ctx.script_exec)
-    ));
-    ASSERT(layer.registry.emplace<ecs::resource<game::vertex>::ptr_type>(
-        entity, ecs::resource<game::vertex>::make(*e_ctx.script_exec)
-    ));
-    ASSERT(layer.registry.emplace<ecs::resource<game::texture>::ptr_type>(
-        entity, ecs::resource<game::texture>::make(*e_ctx.script_exec)
-    ));
-    ASSERT(layer.registry.emplace<ecs::resource<game::material>::ptr_type>(
-        entity, ecs::resource<game::material>::make(*e_ctx.script_exec)
-    ));
-    ASSERT(layer.registry.emplace<ecs::resource<game::mesh>::ptr_type>(
-        entity, ecs::resource<game::mesh>::make(*e_ctx.script_exec)
-    ));
-    ASSERT(layer.registry.emplace<ecs::resource<game::primitive>::ptr_type>(
-        entity, ecs::resource<game::primitive>::make(*e_ctx.script_exec)
-    ));
-
     layer.registry.emplace<game::local_transform>(entity);
     layer.registry.emplace<game::transform>(entity);
 
@@ -977,6 +958,25 @@ exec::async<void> create_scene(
 ) {
     // common vvv
     {
+        ASSERT(layer.registry.emplace<ecs::resource<game::shader>::ptr_type>(
+            layer.root, ecs::resource<game::shader>::make(*e_ctx.sync_exec)
+        ));
+        ASSERT(layer.registry.emplace<ecs::resource<game::vertex>::ptr_type>(
+            layer.root, ecs::resource<game::vertex>::make(*e_ctx.sync_exec)
+        ));
+        ASSERT(layer.registry.emplace<ecs::resource<game::texture>::ptr_type>(
+            layer.root, ecs::resource<game::texture>::make(*e_ctx.sync_exec)
+        ));
+        ASSERT(layer.registry.emplace<ecs::resource<game::material>::ptr_type>(
+            layer.root, ecs::resource<game::material>::make(*e_ctx.sync_exec)
+        ));
+        ASSERT(layer.registry.emplace<ecs::resource<game::mesh>::ptr_type>(
+            layer.root, ecs::resource<game::mesh>::make(*e_ctx.sync_exec)
+        ));
+        ASSERT(layer.registry.emplace<ecs::resource<game::primitive>::ptr_type>(
+            layer.root, ecs::resource<game::primitive>::make(*e_ctx.sync_exec)
+        ));
+
         auto& shader_resource = *layer.registry.get<ecs::resource<game::shader>::ptr_type>(layer.root);
         auto& vertex_resource = *layer.registry.get<ecs::resource<game::vertex>::ptr_type>(layer.root);
         auto& texture_resource = *layer.registry.get<ecs::resource<game::texture>::ptr_type>(layer.root);

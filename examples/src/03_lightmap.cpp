@@ -201,13 +201,13 @@ exec::async<
     layer.registry.emplace<global_entity_state>(entity);
 
     auto& shader_resource = layer.registry.emplace<ecs::resource<game::shader>::ptr_type>(
-        entity, ecs::resource<game::shader>::make(*e_ctx.script_exec)
+        entity, ecs::resource<game::shader>::make(*e_ctx.sync_exec)
     );
     auto& vertex_resource = layer.registry.emplace<ecs::resource<game::vertex>::ptr_type>(
-        entity, ecs::resource<game::vertex>::make(*e_ctx.script_exec)
+        entity, ecs::resource<game::vertex>::make(*e_ctx.sync_exec)
     );
     auto& texture_resource = layer.registry.emplace<ecs::resource<game::texture>::ptr_type>(
-        entity, ecs::resource<game::texture>::make(*e_ctx.script_exec)
+        entity, ecs::resource<game::texture>::make(*e_ctx.sync_exec)
     );
 
     layer.registry.emplace<game::local_transform>(entity);
