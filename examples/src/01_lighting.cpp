@@ -526,7 +526,11 @@ exec::async<void> create_scene(
 }
 
 void main(int argc, char** argv) {
-    spdlog::set_level(spdlog::level::info);
+    auto a_logger = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    game::logger().set_level(spdlog::level::debug);
+    game::logger().sinks().push_back(a_logger);
+    gfx::logger().set_level(spdlog::level::trace);
+    gfx::logger().sinks().push_back(a_logger);
 
     auto w_ctx = *ASSERT_VAL(
         game::window_context::initialize(sl::meta::null, "01_lighting", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f })

@@ -490,23 +490,26 @@ exec::async<std::vector<entt::entity>>
         entities.push_back(entity);
     }
     // example of "alternative" update
-    exec::coro_schedule(*e_ctx.script_exec, [&e_ctx, &layer, pl_entities = entities]() -> exec::async<void> {
-        while (e_ctx.is_ok()) {
-            const auto maybe_tp = co_await e_ctx.next_frame();
-            if (!maybe_tp.has_value()) {
-                continue;
-            }
-            const auto& tp = maybe_tp.value();
+    exec::coro_schedule(
+        *e_ctx.script_exec,
+        [](game::engine_context& e_ctx, ecs::layer& layer, std::vector<entt::entity> entities) -> exec::async<void> {
+            while (e_ctx.is_ok()) {
+                const auto maybe_tp = co_await e_ctx.next_frame();
+                if (!maybe_tp.has_value()) {
+                    continue;
+                }
+                const auto& tp = maybe_tp.value();
 
-            const float coef = std::sin(tp.delta_from_init_sec().count());
-            for (const auto& [initial, pl_entity] : ranges::views::zip(point_lights, pl_entities)) {
-                auto& current = layer.registry.get<game::render::point_light>(pl_entity);
-                current.ambient = initial.ambient * coef;
-                current.diffuse = initial.diffuse * coef;
-                current.specular = initial.specular * coef;
+                const float coef = std::sin(tp.delta_from_init_sec().count());
+                for (const auto& [initial, pl_entity] : ranges::views::zip(point_lights, entities)) {
+                    auto& current = layer.registry.get<game::render::point_light>(pl_entity);
+                    current.ambient = initial.ambient * coef;
+                    current.diffuse = initial.diffuse * coef;
+                    current.specular = initial.specular * coef;
+                }
             }
-        }
-    }());
+        }(e_ctx, layer, entities)
+    );
 
     {
         const entt::entity entity = layer.registry.create();
@@ -1081,6 +1084,8 @@ void main(int argc, char** argv) {
             overlay_system.execute(imgui_frame);
         }
     }
+
+    while (e_ctx.script_exec->execute_batch() > 0) {}
 }
 
 } // namespace sl
