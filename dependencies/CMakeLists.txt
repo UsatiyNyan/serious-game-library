@@ -25,16 +25,12 @@ cpmaddpackage(
         GIT_REPOSITORY "git@github.com:skypjack/entt.git"
         GIT_TAG v3.13.2)
 cpmaddpackage(
-        NAME nlohmann_json
-        GIT_REPOSITORY "git@github.com:nlohmann/json.git"
-        GIT_TAG v3.11.3)
-cpmaddpackage(
-        NAME fx-gltf
-        GIT_REPOSITORY "git@github.com:jessey-git/fx-gltf.git"
-        GIT_TAG v2.0.0
-        OPTIONS "FX_GLTF_BUILD_TESTS OFF" "FX_GLTF_INSTALL OFF"
-        )
-
+        NAME fastgltf
+        GIT_REPOSITORY "git@github.com:spnda/fastgltf.git"
+        GIT_TAG v0.9.0
+        OPTIONS
+        "FASTGLTF_USE_CUSTOM_SMALLVECTOR OFF"
+        "FASTGLTF_COMPILE_AS_CPP20 ON")
 
 sl_target_link_system_libraries(${PROJECT_NAME}
         PUBLIC
@@ -47,6 +43,5 @@ sl_target_link_system_libraries(${PROJECT_NAME}
         # utils
         Boost::container
         EnTT::EnTT
-        nlohmann_json::nlohmann_json
-        fx-gltf::fx-gltf
+        fastgltf::fastgltf
 )

@@ -3,6 +3,7 @@
 //
 
 #include "common.hpp"
+#include <fastgltf/core.hpp>
 #include <sl/exec/algo/make/result.hpp>
 
 namespace sl {
@@ -678,37 +679,35 @@ exec::async<entt::entity> create_imported_entity(
     auto& mesh_resource = *layer.registry.get<ecs::resource<game::mesh>::ptr_type>(layer.root);
     auto& primitive_resource = *layer.registry.get<ecs::resource<game::primitive>::ptr_type>(layer.root);
 
+    using namespace fastgltf;
+    thread_local Parser parser;
+
     const auto asset_path = example_ctx.asset_path / asset_relpath;
     const auto asset_id = asset_relpath.generic_string();
     const auto asset_directory = asset_path.parent_path();
-    const auto asset_document = [&] {
-        using iterator = std::istream_iterator<char>;
-
-        std::ifstream asset_file{ asset_path };
-        const auto asset_json = nlohmann::json::parse(iterator{ asset_file }, iterator{});
-        return *ASSERT_VAL(game::import::document_from_json(asset_json, asset_directory));
+    const auto asset = [&] {
+        auto data_buffer = *ASSERT_VAL(GltfDataBuffer::FromPath(asset_path));
+        auto asset = *ASSERT_VAL(parser.loadGltf(data_buffer, asset_directory));
+        return asset;
     }();
 
-    for (const auto& [material_i, material] : ranges::views::enumerate(asset_document.materials)) {
-        const fx::gltf::Material::PBRMetallicRoughness& material_pbr = material.pbrMetallicRoughness;
-        const fx::gltf::Material::Texture& material_texture = material_pbr.baseColorTexture;
+    for (const auto& [material_i, material] : ranges::views::enumerate(asset.materials)) {
+        const auto& material_pbr = material.pbrData;
+        const auto& material_texture = material_pbr.baseColorTexture;
 
         const auto material_id = "{}.material[{}]"_ufs(asset_id, material_i)(example_ctx.uss);
         auto diffuse = co_await [&]() -> exec::async<game::texture_or_color> {
-            if (material_texture.empty()) {
+            if (!material_texture.has_value()) {
                 const auto color = std::bit_cast<glm::vec4>(material_pbr.baseColorFactor);
                 game::log::debug("color={}", glm::to_string(color));
                 co_return color;
             }
 
-            const fx::gltf::Texture& texture =
-                asset_document.textures.at(static_cast<std::uint32_t>(material_texture.index));
-            ASSERT(texture.source >= 0 && static_cast<std::uint32_t>(texture.source) < asset_document.images.size());
-            const fx::gltf::Image& image = asset_document.images.at(static_cast<std::uint32_t>(texture.source));
-            ASSERT(!image.uri.empty());
-            ASSERT(!image.IsEmbeddedResource(), "not supported yet");
-            const auto texture_path = asset_directory / image.uri;
-            const auto texture_id = "{}.texture"_ufs(image.uri)(example_ctx.uss);
+            const auto& texture = asset.textures.at(material_texture->textureIndex);
+            const auto& image = asset.images.at(*ASSERT_VAL(texture.imageIndex));
+            const auto& image_uri = *ASSERT_VAL(std::get_if<sources::URI>(&image.data));
+            const auto texture_path = asset_directory / image_uri.uri.fspath();
+            const auto texture_id = "{}.texture"_ufs(image_uri.uri.string())(example_ctx.uss);
             game::log::debug("texture_id={}", texture_id);
             co_return *ASSERT_VAL(
                 co_await texture_resource.require(texture_id, script::create_texture(texture_path, false))
@@ -726,7 +725,16 @@ exec::async<entt::entity> create_imported_entity(
         game::log::debug("material_id={}", material_id);
     }
 
-    for (const auto& [mesh_i, mesh_] : ranges::views::enumerate(asset_document.meshes)) {
+    const auto load_bin = [asset_directory](const std::filesystem::path& fspath) {
+        using iterator = std::istream_iterator<char>;
+
+        std::ifstream bin_file{ asset_directory / fspath, std::ios::binary };
+        std::vector<char> output{ iterator{ bin_file }, iterator{} };
+        ASSERT(output.size() > 0);
+        return output;
+    };
+
+    for (const auto& [mesh_i, mesh_] : ranges::views::enumerate(asset.meshes)) {
         const auto mesh_id = "{}.mesh[{}]"_ufs(asset_id, mesh_i)(example_ctx.uss);
         std::ignore = co_await mesh_resource.require(mesh_id, [&, &mesh = mesh_]() -> exec::async<game::mesh> {
             game::mesh mesh_asset;
@@ -734,92 +742,85 @@ exec::async<entt::entity> create_imported_entity(
             for (const auto& [primitive_i, primitive] : ranges::views::enumerate(mesh.primitives)) {
                 const auto primitive_id = "{}.primitive[{}]"_ufs(mesh_id, primitive_i)(example_ctx.uss);
                 const auto primitive_vertex_id = "{}.vertex"_ufs(primitive_id)(example_ctx.uss);
-                const auto primitive_material_id = [&, primitive_material_i = primitive.material] {
-                    if (primitive_material_i == -1) {
+                const auto primitive_material_id = [&, primitive_material_i = primitive.materialIndex] {
+                    if (!primitive_material_i.has_value()) {
                         return default_material_id;
                     }
                     // TODO: FIX THIS
-                    auto material_id = "{}.material[{}]"_ufs(asset_id, primitive_material_i)(example_ctx.uss);
+                    auto material_id = "{}.material[{}]"_ufs(asset_id, primitive_material_i.value())(example_ctx.uss);
                     if (!material_resource.lookup_unsafe(material_id).has_value()) {
                         return default_material_id;
                     }
                     return material_id;
                 }();
 
-                const std::uint32_t vert_attr = primitive.attributes.at("POSITION");
-                const fx::gltf::Accessor& vert_accessor = asset_document.accessors.at(vert_attr);
-                ASSERT(vert_accessor.componentType == fx::gltf::Accessor::ComponentType::Float);
-                ASSERT(vert_accessor.type == fx::gltf::Accessor::Type::Vec3);
+                const auto vert_attr = primitive.findAttribute("POSITION")->accessorIndex;
+                const auto& vert_accessor = asset.accessors.at(vert_attr);
+                ASSERT(vert_accessor.componentType == ComponentType::Float);
+                ASSERT(vert_accessor.type == AccessorType::Vec3);
                 ASSERT(vert_accessor.count > 0);
-                const fx::gltf::BufferView& vert_buffer_view =
-                    asset_document.bufferViews.at(static_cast<std::uint32_t>(vert_accessor.bufferView));
-                const fx::gltf::Buffer& vert_buffer =
-                    asset_document.buffers.at(static_cast<std::uint32_t>(vert_buffer_view.buffer));
-                const auto* vert_data_begin =
-                    vert_buffer.data.data() + vert_buffer_view.byteOffset + vert_accessor.byteOffset;
-                const auto* vert_data_end = vert_data_begin + vert_buffer_view.byteLength;
-                const auto vert_at = [vert_data_begin,
-                                      vert_data_end,
+                const auto& vert_buffer_view = asset.bufferViews.at(*ASSERT_VAL(vert_accessor.bufferViewIndex));
+                const auto& vert_buffer = asset.buffers.at(vert_buffer_view.bufferIndex);
+                const auto& vert_buffer_uri = *ASSERT_VAL(std::get_if<sources::URI>(&vert_buffer.data));
+                const auto vert_buffer_data = load_bin(vert_buffer_uri.uri.fspath());
+                const auto vert_buffer_data_bytes = std::span{ vert_buffer_data }.subspan(
+                    vert_buffer_view.byteOffset + vert_accessor.byteOffset, vert_buffer_view.byteLength
+                );
+                const auto vert_at = [vert_buffer_data_bytes,
                                       byte_stride = vert_buffer_view.byteStride,
-                                      count = vert_accessor.count](std::uint32_t i) {
+                                      count = vert_accessor.count](std::size_t i) {
                     using element_type = gfx::va_attrib_field<3, float>;
                     ASSERT(i < count);
-                    const auto* vert_data_addr =
-                        vert_data_begin + (byte_stride == 0 ? sizeof(element_type) : byte_stride) * i;
-                    ASSERT(vert_data_addr < vert_data_end);
-                    return *std::bit_cast<const element_type*>(vert_data_addr);
+                    const auto address = byte_stride.value_or(sizeof(element_type)) * i;
+                    ASSERT(address < vert_buffer_data_bytes.size_bytes());
+                    return *std::bit_cast<const element_type*>(vert_buffer_data_bytes.data() + address);
                 };
 
-                const std::uint32_t normal_attr = primitive.attributes.at("NORMAL");
-                const fx::gltf::Accessor& normal_accessor = asset_document.accessors.at(normal_attr);
-                ASSERT(normal_accessor.componentType == fx::gltf::Accessor::ComponentType::Float);
-                ASSERT(normal_accessor.type == fx::gltf::Accessor::Type::Vec3);
+                const auto normal_attr = primitive.findAttribute("NORMAL")->accessorIndex;
+                const auto& normal_accessor = asset.accessors.at(normal_attr);
+                ASSERT(normal_accessor.componentType == ComponentType::Float);
+                ASSERT(normal_accessor.type == AccessorType::Vec3);
                 ASSERT(normal_accessor.count > 0);
-                const fx::gltf::BufferView& normal_buffer_view =
-                    asset_document.bufferViews.at(static_cast<std::uint32_t>(normal_accessor.bufferView));
-                const fx::gltf::Buffer& normal_buffer =
-                    asset_document.buffers.at(static_cast<std::uint32_t>(normal_buffer_view.buffer));
-                const auto* normal_data_begin =
-                    normal_buffer.data.data() + normal_buffer_view.byteOffset + normal_accessor.byteOffset;
-                const auto* normal_data_end = normal_data_begin + normal_buffer_view.byteLength;
-                const auto normal_at = [normal_data_begin,
-                                        normal_data_end,
+                const auto& normal_buffer_view = asset.bufferViews.at(*ASSERT_VAL(normal_accessor.bufferViewIndex));
+                const auto& normal_buffer = asset.buffers.at(normal_buffer_view.bufferIndex);
+                const auto& normal_buffer_uri = *ASSERT_VAL(std::get_if<sources::URI>(&normal_buffer.data));
+                const auto normal_buffer_data = load_bin(normal_buffer_uri.uri.fspath());
+                const auto normal_buffer_data_bytes = std::span{ normal_buffer_data }.subspan(
+                    normal_buffer_view.byteOffset + normal_accessor.byteOffset, normal_buffer_view.byteLength
+                );
+                const auto normal_at = [normal_buffer_data_bytes,
                                         byte_stride = normal_buffer_view.byteStride,
-                                        count = normal_accessor.count](std::uint32_t i) {
+                                        count = normal_accessor.count](std::size_t i) {
                     using element_type = gfx::va_attrib_field<3, float>;
                     ASSERT(i < count);
-                    const auto* normal_data_addr =
-                        normal_data_begin + (byte_stride == 0 ? sizeof(element_type) : byte_stride) * i;
-                    ASSERT(normal_data_addr < normal_data_end);
-                    return *std::bit_cast<const element_type*>(normal_data_addr);
+                    const auto address = byte_stride.value_or(sizeof(element_type)) * i;
+                    return *std::bit_cast<const element_type*>(normal_buffer_data_bytes.data() + address);
                 };
 
-                const std::uint32_t tex_coord_attr = primitive.attributes.at("TEXCOORD_0");
-                const fx::gltf::Accessor& tex_coord_accessor = asset_document.accessors.at(tex_coord_attr);
-                ASSERT(tex_coord_accessor.componentType == fx::gltf::Accessor::ComponentType::Float);
-                ASSERT(tex_coord_accessor.type == fx::gltf::Accessor::Type::Vec2);
+                const auto tex_coord_attr = primitive.findAttribute("TEXCOORD_0")->accessorIndex;
+                const auto& tex_coord_accessor = asset.accessors.at(tex_coord_attr);
+                ASSERT(tex_coord_accessor.componentType == ComponentType::Float);
+                ASSERT(tex_coord_accessor.type == AccessorType::Vec2);
                 ASSERT(tex_coord_accessor.count > 0);
-                const fx::gltf::BufferView& tex_coord_buffer_view =
-                    asset_document.bufferViews.at(static_cast<std::uint32_t>(tex_coord_accessor.bufferView));
-                const fx::gltf::Buffer& tex_coord_buffer =
-                    asset_document.buffers.at(static_cast<std::uint32_t>(tex_coord_buffer_view.buffer));
-                const auto* tex_coord_data_begin =
-                    tex_coord_buffer.data.data() + tex_coord_buffer_view.byteOffset + tex_coord_accessor.byteOffset;
-                const auto* tex_coord_data_end = tex_coord_data_begin + tex_coord_buffer_view.byteLength;
-                const auto tex_coord_at = [tex_coord_data_begin,
-                                           tex_coord_data_end,
+                const auto& tex_coord_buffer_view =
+                    asset.bufferViews.at(*ASSERT_VAL(tex_coord_accessor.bufferViewIndex));
+                const auto& tex_coord_buffer = asset.buffers.at(tex_coord_buffer_view.bufferIndex);
+                const auto& tex_coord_buffer_uri = *ASSERT_VAL(std::get_if<sources::URI>(&tex_coord_buffer.data));
+                const auto tex_coord_buffer_data = load_bin(tex_coord_buffer_uri.uri.fspath());
+                const auto tex_coord_buffer_data_bytes = std::span{ tex_coord_buffer_data }.subspan(
+                    tex_coord_buffer_view.byteOffset + tex_coord_accessor.byteOffset, tex_coord_buffer_view.byteLength
+                );
+                const auto tex_coord_at = [tex_coord_buffer_data_bytes,
                                            byte_stride = tex_coord_buffer_view.byteStride,
-                                           count = tex_coord_accessor.count](std::uint32_t i) {
+                                           count = tex_coord_accessor.count](std::size_t i) {
                     using element_type = gfx::va_attrib_field<2, float>;
                     ASSERT(i < count);
-                    const auto* tex_coord_data_addr =
-                        tex_coord_data_begin + (byte_stride == 0 ? sizeof(element_type) : byte_stride) * i;
-                    ASSERT(tex_coord_data_addr < tex_coord_data_end);
-                    return *std::bit_cast<const element_type*>(tex_coord_data_addr);
+                    const auto address = byte_stride.value_or(sizeof(element_type)) * i;
+                    return *std::bit_cast<const element_type*>(tex_coord_buffer_data_bytes.data() + address);
                 };
 
                 const std::vector<VNT> vnts = [&] {
-                    const std::uint32_t vnt_count =
+                    const auto vnt_count =
                         std::min(std::min(vert_accessor.count, normal_accessor.count), tex_coord_accessor.count);
 
                     std::vector<VNT> vnts;
@@ -835,32 +836,31 @@ exec::async<entt::entity> create_imported_entity(
                 }();
                 ASSERT(!vnts.empty());
 
-                const fx::gltf::Accessor& indices_accessor =
-                    asset_document.accessors.at(static_cast<std::uint32_t>(primitive.indices));
+                const auto& indices_accessor = asset.accessors.at(*ASSERT_VAL(primitive.indicesAccessor));
                 ASSERT(
-                    indices_accessor.componentType == fx::gltf::Accessor::ComponentType::UnsignedShort
-                    || indices_accessor.componentType == fx::gltf::Accessor::ComponentType::UnsignedInt
+                    indices_accessor.componentType == ComponentType::UnsignedShort
+                    || indices_accessor.componentType == ComponentType::UnsignedInt
                 );
-                ASSERT(indices_accessor.type == fx::gltf::Accessor::Type::Scalar);
-                const fx::gltf::BufferView& indices_buffer_view =
-                    asset_document.bufferViews.at(static_cast<std::uint32_t>(indices_accessor.bufferView));
-                ASSERT(indices_buffer_view.byteStride == 0);
-                const fx::gltf::Buffer& indices_buffer =
-                    asset_document.buffers.at(static_cast<std::uint32_t>(indices_buffer_view.buffer));
+                ASSERT(indices_accessor.type == AccessorType::Scalar);
+                const auto& indices_buffer_view = asset.bufferViews.at(*ASSERT_VAL(indices_accessor.bufferViewIndex));
+                ASSERT(!indices_buffer_view.byteStride.has_value());
+                const auto& indices_buffer = asset.buffers.at(indices_buffer_view.bufferIndex);
 
-                const auto f = [&](const auto* indices_data) -> exec::async<void> {
-                    const std::span indices_span{ indices_data, indices_accessor.count };
+                const auto f = [&](const auto indices_data) -> exec::async<void> {
+                    const std::span indices_span = indices_data.subspan(0, indices_accessor.count);
                     ASSERT(co_await vertex_resource.require(
                         primitive_vertex_id, script::create_vertex(std::span(vnts), indices_span)
                     ));
                 };
 
-                const auto* indices_data =
-                    indices_buffer.data.data() + indices_buffer_view.byteOffset + indices_accessor.byteOffset;
-                if (indices_accessor.componentType == fx::gltf::Accessor::ComponentType::UnsignedShort) {
-                    co_await f(std::bit_cast<const std::uint16_t*>(indices_data));
+                const auto& indices_uri = *ASSERT_VAL(std::get_if<sources::URI>(&indices_buffer.data));
+                const auto indices_data = load_bin(indices_uri.uri.fspath());
+                const auto indicies_data_bytes =
+                    std::span{ indices_data }.subspan(indices_buffer_view.byteOffset + indices_accessor.byteOffset);
+                if (indices_accessor.componentType == ComponentType::UnsignedShort) {
+                    co_await f(std::bit_cast<std::span<const std::uint16_t>>(indicies_data_bytes));
                 } else {
-                    co_await f(std::bit_cast<const std::uint32_t*>(indices_data));
+                    co_await f(std::bit_cast<std::span<const std::uint32_t>>(indicies_data_bytes));
                 }
 
                 ASSERT(co_await primitive_resource.require(
@@ -887,8 +887,8 @@ exec::async<entt::entity> create_imported_entity(
 
     const std::vector<entt::entity> node_entities = [&] {
         std::vector<entt::entity> node_entities;
-        node_entities.reserve(asset_document.nodes.size());
-        for (std::size_t i = 0; i < asset_document.nodes.size(); ++i) {
+        node_entities.reserve(asset.nodes.size());
+        for (std::size_t i = 0; i < asset.nodes.size(); ++i) {
             const entt::entity node_entity = layer.registry.create();
             node_entities.push_back(node_entity);
             game::log::debug("node_entity={}", static_cast<entt::id_type>(node_entity));
@@ -896,27 +896,30 @@ exec::async<entt::entity> create_imported_entity(
         return node_entities;
     }();
 
-    for (const auto& [node_entity, node_document] : ranges::views::zip(node_entities, asset_document.nodes)) {
+    for (const auto& [node_entity, node_document] : ranges::views::zip(node_entities, asset.nodes)) {
         layer.registry.emplace<game::local_transform>(node_entity, [&node = node_document] {
-            if (node.matrix != fx::gltf::defaults::IdentityMatrix) {
-                return *ASSERT_VAL(game::transform::from_mat4(std::bit_cast<glm::mat4>(node.matrix)));
-            }
-
-            return game::transform{
-                .tr = std::bit_cast<glm::vec3>(node.translation),
-                .rot = std::bit_cast<glm::quat>(node.rotation),
-                .s = std::bit_cast<glm::vec3>(node.scale),
-            };
+            return node.transform
+                   | meta::pmatch{
+                         [](const TRS& trs) {
+                             return game::transform{
+                                 .tr = std::bit_cast<glm::vec3>(trs.translation),
+                                 .rot = std::bit_cast<glm::quat>(trs.rotation),
+                                 .s = std::bit_cast<glm::vec3>(trs.scale),
+                             };
+                         },
+                         [](const math::fmat4x4& matrix) {
+                             return *ASSERT_VAL(game::transform::from_mat4(std::bit_cast<glm::mat4>(matrix)));
+                         },
+                     };
         }());
 
-        for (const std::int32_t child_i : node_document.children) {
-            ASSERT(child_i >= 0 && static_cast<std::uint32_t>(child_i) < node_entities.size());
-            const entt::entity child_entity = node_entities.at(static_cast<std::uint32_t>(child_i));
+        for (const std::size_t child_i : node_document.children) {
+            const entt::entity child_entity = node_entities.at(child_i);
             game::node::attach_child(layer, node_entity, child_entity);
         }
 
-        if (node_document.mesh >= 0) {
-            const auto mesh_id = "{}.mesh[{}]"_ufs(asset_id, node_document.mesh)(example_ctx.uss);
+        if (node_document.meshIndex.has_value()) {
+            const auto mesh_id = "{}.mesh[{}]"_ufs(asset_id, node_document.meshIndex.value())(example_ctx.uss);
             const auto mesh_asset = *ASSERT_VAL(mesh_resource.lookup_unsafe(mesh_id));
             for (const auto& primitive : mesh_asset->primitives) {
                 const auto primitive_asset = *ASSERT_VAL(primitive_resource.lookup_unsafe(primitive.id));
@@ -931,13 +934,10 @@ exec::async<entt::entity> create_imported_entity(
         }
     }
 
-    ASSERT(asset_document.scene >= 0);
-    const fx::gltf::Scene& asset_scene_document =
-        asset_document.scenes.at(static_cast<std::uint32_t>(asset_document.scene));
+    const auto& asset_scene_document = asset.scenes.at(*ASSERT_VAL(asset.defaultScene));
     entt::entity imported_scene = layer.registry.create();
     layer.registry.emplace<game::local_transform>(imported_scene, game::transform{});
-    for (const std::uint32_t node_i : asset_scene_document.nodes) {
-        ASSERT(node_i < node_entities.size());
+    for (const auto node_i : asset_scene_document.nodeIndices) {
         const entt::entity node_entity = node_entities.at(node_i);
         game::node::attach_child(layer, imported_scene, node_entity);
     }
@@ -953,6 +953,7 @@ exec::async<entt::entity> create_imported_entity(
     );
     co_return imported_scene;
 }
+
 exec::async<void> create_scene(
     game::engine_context& e_ctx,
     script::example_context& example_ctx,

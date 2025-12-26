@@ -16,14 +16,13 @@ sl_project_prologue(
 
 project(
         serious-game-library
-        VERSION 0.0.1
+        VERSION 0.0.2
         DESCRIPTION "game library"
         HOMEPAGE_URL "TODO"
         LANGUAGES C CXX)
 
 add_library(${PROJECT_NAME} STATIC
         src/detail/log.cpp
-        src/engine/import.cpp
         src/engine/context.cpp
         src/graphics/system/overlay.cpp
         src/graphics/system/render.cpp
