@@ -5,6 +5,8 @@
 #pragma once
 
 #include "sl/game/graphics/context.hpp"
+#include "sl/game/graphics/system/overlay.hpp"
+#include "sl/game/graphics/system/render.hpp"
 #include "sl/game/input/system.hpp"
 #include "sl/game/time.hpp"
 
@@ -18,6 +20,8 @@ namespace sl::game {
 
 struct engine_context {
     [[nodiscard]] static engine_context initialize(window_context&& w_ctx, int argc = 0, char** argv = nullptr);
+
+    void spin_once(ecs::layer& layer, game::graphics_system& gfx_system, game::overlay_system& overlay_system);
 
     [[nodiscard]] bool is_ok() const;
 

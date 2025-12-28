@@ -954,12 +954,8 @@ exec::async<entt::entity> create_imported_entity(
     co_return imported_scene;
 }
 
-exec::async<void> create_scene(
-    game::engine_context& e_ctx,
-    script::example_context& example_ctx,
-    ecs::layer& layer,
-    const game::basis& world
-) {
+exec::async<void> create_scene(game::engine_context& e_ctx, ecs::layer& layer, const game::basis& world) {
+    auto example_ctx = script::example_context::create(e_ctx);
     // common vvv
     {
         ASSERT(layer.registry.emplace<ecs::resource<game::shader>::ptr_type>(
@@ -1044,46 +1040,14 @@ void main(int argc, char** argv) {
         game::window_context::initialize(sl::meta::null, "04_many_lights", { 1280, 720 }, { 0.1f, 0.1f, 0.1f, 0.1f })
     );
     auto e_ctx = game::engine_context::initialize(std::move(w_ctx), argc, argv);
-    auto example_ctx = script::example_context::create(e_ctx);
     ecs::layer layer{};
     game::graphics_system gfx_system{ .layer = layer, .world{} };
     game::overlay_system overlay_system{ .layer = layer };
 
-    exec::coro_schedule(*e_ctx.script_exec, create_scene(e_ctx, example_ctx, layer, gfx_system.world));
+    exec::coro_schedule(*e_ctx.script_exec, create_scene(e_ctx, layer, gfx_system.world));
 
-    while (!e_ctx.w_ctx.current_window.should_close()) {
-        // input
-        e_ctx.w_ctx.context->poll_events();
-        e_ctx.w_ctx.state->frame_buffer_size.release().map( //
-            [&cw = e_ctx.w_ctx.current_window](const glm::ivec2& frame_buffer_size) {
-                cw.viewport(glm::ivec2{}, frame_buffer_size);
-            }
-        );
-        e_ctx.w_ctx.state->window_content_scale
-            .release() //
-            .map([&overlay_system](const glm::fvec2& window_content_scale) {
-                overlay_system.on_window_content_scale_changed(window_content_scale);
-            });
-        e_ctx.in_sys->process(layer);
-
-        const game::time_point& time_point = e_ctx.time_calculate();
-
-        // update and execute scripts
-        std::ignore = e_ctx.script_exec->execute_batch();
-        game::update_system(layer, time_point);
-
-        // transform update
-        game::local_transform_system(layer, time_point);
-
-        // render
-        const auto window_frame = e_ctx.w_ctx.new_frame();
-        gfx_system.execute(window_frame);
-
-        // overlay
-        auto imgui_frame = e_ctx.w_ctx.imgui.new_frame();
-        if (auto imgui_window = imgui_frame.begin("entities")) {
-            overlay_system.execute(imgui_frame);
-        }
+    while (e_ctx.is_ok()) {
+        e_ctx.spin_once(layer, gfx_system, overlay_system);
     }
 
     while (e_ctx.script_exec->execute_batch() > 0) {}

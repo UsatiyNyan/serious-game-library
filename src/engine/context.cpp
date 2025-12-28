@@ -3,6 +3,8 @@
 //
 
 #include "sl/game/engine/context.hpp"
+#include "sl/game/graphics/system/transform.hpp"
+#include "sl/game/update/system.hpp"
 
 #include <sl/exec/algo/sched/start_on.hpp>
 #include <sl/exec/coro/await.hpp>
@@ -25,6 +27,43 @@ engine_context engine_context::initialize(window_context&& w_ctx, int argc, char
         .time{},
         .maybe_time_point{},
     };
+}
+
+void engine_context::spin_once(
+    ecs::layer& layer,
+    game::graphics_system& gfx_system,
+    game::overlay_system& overlay_system
+) {
+    // input
+    w_ctx.context->poll_events();
+    w_ctx.state->frame_buffer_size.release().map([this](const glm::ivec2& frame_buffer_size) {
+        w_ctx.current_window.viewport(glm::ivec2{}, frame_buffer_size);
+    });
+    w_ctx.state->window_content_scale
+        .release() //
+        .map([&overlay_system](const glm::fvec2& window_content_scale) {
+            overlay_system.on_window_content_scale_changed(window_content_scale);
+        });
+    in_sys->process(layer);
+
+    const game::time_point& time_point = time_calculate();
+
+    // update and execute scripts
+    std::ignore = script_exec->execute_batch();
+    game::update_system(layer, time_point);
+
+    // transform update
+    game::local_transform_system(layer, time_point);
+
+    // render
+    const auto window_frame = w_ctx.new_frame();
+    gfx_system.execute(window_frame);
+
+    // overlay
+    auto imgui_frame = w_ctx.imgui.new_frame();
+    if (auto imgui_window = imgui_frame.begin("overlay")) {
+        overlay_system.execute(imgui_frame);
+    }
 }
 
 bool engine_context::is_ok() const { return !w_ctx.current_window.should_close(); }
