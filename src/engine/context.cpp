@@ -61,9 +61,7 @@ void engine_context::spin_once(
 
     // overlay
     auto imgui_frame = w_ctx.imgui.new_frame();
-    if (auto imgui_window = imgui_frame.begin("overlay")) {
-        overlay_system.execute(imgui_frame);
-    }
+    overlay_system.execute(imgui_frame);
 }
 
 bool engine_context::is_ok() const { return !w_ctx.current_window.should_close(); }
