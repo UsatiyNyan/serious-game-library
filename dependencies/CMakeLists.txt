@@ -16,7 +16,7 @@ cpmaddpackage(
 cpmaddpackage(
         NAME serious-graphics-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-graphics-library.git"
-        GIT_TAG 0.0.2)
+        GIT_TAG 0.0.3)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/boost.cmake")
 
