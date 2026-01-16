@@ -3,7 +3,7 @@
 cpmaddpackage(
         NAME serious-meta-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-meta-library.git"
-        GIT_TAG 1.0.2)
+        GIT_TAG 1.0.3)
 cpmaddpackage(
         NAME serious-execution-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-execution-library.git"
@@ -16,7 +16,7 @@ cpmaddpackage(
 cpmaddpackage(
         NAME serious-graphics-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-graphics-library.git"
-        GIT_TAG 0.0.3)
+        GIT_TAG 0.0.4)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/boost.cmake")
 

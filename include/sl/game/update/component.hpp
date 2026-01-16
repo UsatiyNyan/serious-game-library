@@ -9,6 +9,8 @@
 #include <sl/ecs/layer.hpp>
 #include <sl/meta/func/function.hpp>
 
+#include <span>
+
 namespace sl::game {
 
 struct node {
