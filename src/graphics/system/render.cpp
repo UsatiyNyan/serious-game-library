@@ -8,7 +8,7 @@
 
 #include <sl/ecs/resource.hpp>
 
-#include <libassert/assert.hpp>
+#include <sl/meta/assert.hpp>
 #include <tsl/robin_map.h>
 
 namespace sl::game {
@@ -61,16 +61,11 @@ meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(c
                 continue;
             }
             meta::persistent<shader> shader_component = std::move(maybe_shader_component).value();
-
-            if (!ASSUME_VAL(shader_component->setup)) {
-                continue;
-            }
+            ASSERT(shader_component->setup);
 
             const auto bound_sp = shader_component->sp.bind();
             auto draw = shader_component->setup(layer, camera_frame, bound_sp);
-            if (!ASSUME_VAL(draw)) {
-                continue;
-            }
+            ASSERT(draw);
 
             for (const auto& [vertex_id, entities] : ve_map) {
                 auto maybe_vertex_component = vertex_resource.lookup_unsafe(vertex_id);
@@ -79,10 +74,7 @@ meta::result<meta::unit, graphics_system::error_type> graphics_system::execute(c
                     continue;
                 }
                 meta::persistent<vertex> vertex_component = std::move(maybe_vertex_component).value();
-
-                if (!ASSUME_VAL(vertex_component->draw)) {
-                    continue;
-                }
+                ASSERT(vertex_component->draw);
 
                 const auto bound_va = vertex_component->va.bind();
                 draw(bound_va, vertex_component->draw, std::span{ entities });

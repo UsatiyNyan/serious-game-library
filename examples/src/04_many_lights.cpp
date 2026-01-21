@@ -5,6 +5,7 @@
 #include "common.hpp"
 #include <fastgltf/core.hpp>
 #include <sl/exec/algo/make/result.hpp>
+#include <fmt/ranges.h>
 
 namespace sl {
 

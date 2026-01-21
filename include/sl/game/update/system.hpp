@@ -6,9 +6,10 @@
 
 #include "sl/game/update/component.hpp"
 
-#include <libassert/assert.hpp>
 #include <sl/ecs/layer.hpp>
+#include <sl/meta/assert.hpp>
 #include <type_traits>
+#include <utility>
 
 namespace sl::game {
 
@@ -72,7 +73,7 @@ void tree_update_system(tree_update_order order, ecs::layer& layer, Update auto 
         detail::tree_update_bottom_up(layer, std::move(an_update), time_point);
         break;
     default:
-        UNREACHABLE();
+        std::unreachable();
     }
 }
 

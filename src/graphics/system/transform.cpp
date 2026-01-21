@@ -5,7 +5,7 @@
 #include "sl/game/graphics/system/transform.hpp"
 #include "sl/game/update/system.hpp"
 
-#include <libassert/assert.hpp>
+#include <sl/meta/assert.hpp>
 
 namespace sl::game {
 namespace detail {

@@ -8,7 +8,7 @@
 #include "sl/game/input/detail.hpp"
 
 #include <glm/glm.hpp>
-#include <libassert/assert.hpp>
+#include <sl/meta/assert.hpp>
 #include <variant>
 #include <vector>
 

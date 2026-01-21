@@ -4,7 +4,7 @@
 
 #include <sl/game.hpp>
 
-#include <libassert/assert.hpp>
+#include <sl/meta/assert.hpp>
 #include <spdlog/spdlog.h>
 
 namespace game = sl::game;

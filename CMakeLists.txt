@@ -11,12 +11,12 @@ FetchContent_MakeAvailable(serious-cmake-library)
 # Project
 
 sl_project_prologue(
-        CXX_STANDARD 20
+        CXX_STANDARD 23
         C_STANDARD 17)
 
 project(
         serious-game-library
-        VERSION 0.0.6
+        VERSION 0.1.0
         DESCRIPTION "game library"
         HOMEPAGE_URL "TODO"
         LANGUAGES C CXX)

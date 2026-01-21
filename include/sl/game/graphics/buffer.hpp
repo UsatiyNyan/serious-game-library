@@ -11,7 +11,7 @@
 #include <sl/gfx/vtx/buffer.hpp>
 #include <sl/meta/monad/maybe.hpp>
 
-#include <libassert/assert.hpp>
+#include <sl/meta/assert.hpp>
 
 namespace sl::game {
 
@@ -48,7 +48,7 @@ template <SSBOElement SSBOElementT, gfx::buffer_usage buffer_usage>
     auto view = layer.registry.template view<typename SSBOElementT::component_type>();
     for (const auto& [entity, component] : view.each()) {
         if (const bool enough_capacity = size_counter < mapped_ssbo_data.size();
-            !ASSUME_VAL(enough_capacity, mapped_ssbo_data.size())) {
+            !DEBUG_ASSERT_VAL(enough_capacity, "", mapped_ssbo_data.size())) {
             log::warn("exceeded limit of {} = {}", typeid(SSBOElementT).name(), mapped_ssbo_data.size());
             break;
         }
