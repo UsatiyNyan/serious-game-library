@@ -7,7 +7,7 @@ cpmaddpackage(
 cpmaddpackage(
         NAME serious-execution-library
         GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-execution-library.git"
-        GIT_TAG 1.1.0)
+        GIT_TAG 1.1.1)
 # provides spdlog
 cpmaddpackage(
         NAME serious-runtime-library

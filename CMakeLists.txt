@@ -16,7 +16,7 @@ sl_project_prologue(
 
 project(
         serious-game-library
-        VERSION 0.1.0
+        VERSION 0.1.1
         DESCRIPTION "game library"
         HOMEPAGE_URL "TODO"
         LANGUAGES C CXX)
