@@ -3,8 +3,9 @@ cmake_minimum_required(VERSION 3.21)
 include(FetchContent)
 FetchContent_Declare(
         serious-cmake-library
-        GIT_REPOSITORY git@github.com:UsatiyNyan/serious-cmake-library.git
+        GIT_REPOSITORY https://github.com/UsatiyNyan/serious-cmake-library.git
         GIT_TAG main
+        GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(serious-cmake-library)
 
@@ -16,7 +17,7 @@ sl_project_prologue(
 
 project(
         serious-game-library
-        VERSION 0.1.2
+        VERSION 0.1.3
         DESCRIPTION "game library"
         HOMEPAGE_URL "TODO"
         LANGUAGES C CXX)

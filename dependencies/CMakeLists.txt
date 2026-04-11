@@ -2,32 +2,32 @@
 # provides fmt, assert
 cpmaddpackage(
         NAME serious-meta-library
-        GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-meta-library.git"
-        GIT_TAG 1.2.2)
+        GIT_REPOSITORY "https://github.com/UsatiyNyan/serious-meta-library.git"
+        GIT_TAG 1.3.0
+        GIT_SHALLOW TRUE)
 cpmaddpackage(
         NAME serious-execution-library
-        GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-execution-library.git"
-        GIT_TAG 2.0.2)
+        GIT_REPOSITORY "https://github.com/UsatiyNyan/serious-execution-library.git"
+        GIT_TAG 2.0.4
+        GIT_SHALLOW TRUE)
 # provides spdlog
 cpmaddpackage(
         NAME serious-runtime-library
-        GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-runtime-library.git"
-        GIT_TAG 0.0.1)
+        GIT_REPOSITORY "https://github.com/UsatiyNyan/serious-runtime-library.git"
+        GIT_TAG 0.0.3
+        GIT_SHALLOW TRUE)
 cpmaddpackage(
         NAME serious-graphics-library
-        GIT_REPOSITORY "git@github.com:UsatiyNyan/serious-graphics-library.git"
-        GIT_TAG 0.2.1)
-
-include("${CMAKE_CURRENT_SOURCE_DIR}/boost.cmake")
+        GIT_REPOSITORY "https://github.com/UsatiyNyan/serious-graphics-library.git"
+        GIT_TAG 0.2.2
+        GIT_SHALLOW TRUE)
 
 cpmaddpackage(
         NAME EnTT
-        GIT_REPOSITORY "git@github.com:skypjack/entt.git"
-        GIT_TAG v3.13.2)
+        URL https://github.com/skypjack/entt/archive/refs/tags/v3.13.2.tar.gz)
 cpmaddpackage(
         NAME fastgltf
-        GIT_REPOSITORY "git@github.com:spnda/fastgltf.git"
-        GIT_TAG v0.9.0
+        URL https://github.com/spnda/fastgltf/archive/refs/tags/v0.9.0.tar.gz
         OPTIONS
         "FASTGLTF_USE_CUSTOM_SMALLVECTOR OFF"
         "FASTGLTF_COMPILE_AS_CPP20 ON")
@@ -41,7 +41,6 @@ sl_target_link_system_libraries(${PROJECT_NAME}
         sl::gfx
 
         # utils
-        Boost::container
         EnTT::EnTT
         fastgltf::fastgltf
 )
