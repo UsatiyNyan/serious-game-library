@@ -39,8 +39,8 @@ public:
     std::unique_ptr<exec::manual_executor> script_exec;
     std::unique_ptr<exec::serial_executor<>> sync_exec;
 
-    time time;
-    meta::maybe<time_point> maybe_time_point;
+    time t;
+    meta::maybe<time_point> maybe_tp;
 };
 
 } // namespace sl::game

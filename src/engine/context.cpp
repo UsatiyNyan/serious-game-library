@@ -24,8 +24,8 @@ engine_context engine_context::initialize(window_context&& w_ctx, int argc, char
         .in_sys = std::move(in_sys),
         .script_exec = std::move(script_exec),
         .sync_exec = std::move(sync_exec),
-        .time{},
-        .maybe_time_point{},
+        .t{},
+        .maybe_tp{},
     };
 }
 
@@ -66,12 +66,12 @@ void engine_context::spin_once(
 
 bool engine_context::is_ok() const { return !w_ctx.current_window.should_close(); }
 
-const time_point& engine_context::time_calculate() { return maybe_time_point.emplace(time.calculate()); }
+const time_point& engine_context::time_calculate() { return maybe_tp.emplace(t.calculate()); }
 
 exec::async<meta::maybe<const time_point&>> engine_context::next_frame() {
     using exec::operator co_await;
     co_await exec::start_on(*script_exec);
-    co_return maybe_time_point.map([](const time_point& tp) -> const time_point& { return tp; });
+    co_return maybe_tp.map([](const time_point& tp) -> const time_point& { return tp; });
 }
 
 } // namespace sl::game
