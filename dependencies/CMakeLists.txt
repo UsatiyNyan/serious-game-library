@@ -3,7 +3,7 @@
 cpmaddpackage(
         NAME serious-meta-library
         GIT_REPOSITORY "https://github.com/UsatiyNyan/serious-meta-library.git"
-        GIT_TAG 1.3.0
+        GIT_TAG 2.0.0
         GIT_SHALLOW TRUE)
 cpmaddpackage(
         NAME serious-execution-library

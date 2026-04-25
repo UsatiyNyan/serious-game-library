@@ -12,7 +12,7 @@
 #include <sl/gfx/ctx/window.hpp>
 
 #include <sl/meta/conn/dirty.hpp>
-#include <sl/meta/conn/scoped_conn.hpp>
+#include <sl/meta/conn/signal.hpp>
 #include <sl/meta/lifetime/defer.hpp>
 #include <sl/meta/lifetime/finalizer.hpp>
 
